@@ -185,7 +185,13 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 
                 const message = nacl.util.encodeUTF8(res);
                 const parsed = JSON.parse(message);
-                callback(keepass.verifyResponse(parsed, incrementedNonce) ? 'success' : 'error');
+
+                // KeePassXC versions lower than 2.5.0 will have an empty parsed.error
+                let successMessage = parsed.error;
+                if (parsed.error === 'success' || parsed.error === '') {
+                    successMessage = entryId ? 'updated' : 'created';
+                }
+                callback(keepass.verifyResponse(parsed, incrementedNonce) ? successMessage : 'error');
             } else if (response.error && response.errorCode) {
                 keepass.handleError(tab, response.errorCode, response.error);
                 callback('error');
@@ -1153,6 +1159,7 @@ keepass.reconnect = function(callback, tab) {
                 }
                 keepass.testAssociation((associationResponse) => {
                     keepass.isConfigured().then((configured) => {
+                        keepass.updateDatabaseHashToContent();
                         resolve(true);
                     });
                 });

@@ -34,13 +34,9 @@ kpxcAutocomplete.create = function(input, showListInstantly = false, autoSubmit 
 kpxcAutocomplete.showList = function(inputField) {
     kpxcAutocomplete.closeList();
     kpxcAutocomplete.input = inputField;
+    
     const div = kpxcUI.createElement('div', 'kpxcAutocomplete-items', { 'id': 'kpxcAutocomplete-list' });
-
-    // Element position
-    const rect = inputField.getBoundingClientRect();
-    div.style.top = String((rect.top + document.body.scrollTop) + inputField.offsetHeight) + 'px';
-    div.style.left = String((rect.left + document.body.scrollLeft)) + 'px';
-    div.style.minWidth = String(inputField.offsetWidth) + 'px';
+    kpxcAutocomplete.updatePosition(inputField, div);
     div.style.zIndex = '2147483646';
     document.body.append(div);
 
@@ -196,6 +192,14 @@ kpxcAutocomplete.fillPassword = function(value, index) {
     kpxcAutocomplete.input.setAttribute('fetched', true);
 };
 
+kpxcAutocomplete.updatePosition = function(inputField, elem) {
+    const div = elem || $('.kpxcAutocomplete-items');
+    const rect = inputField.getBoundingClientRect();
+    div.style.top = String((rect.top + document.scrollingElement.scrollTop) + inputField.offsetHeight) + 'px';
+    div.style.left = String((rect.left + document.scrollingElement.scrollLeft)) + 'px';
+    div.style.minWidth = String(inputField.offsetWidth) + 'px';
+};
+
 // Detect click outside autocomplete
 document.addEventListener('click', function(e) {
     if (!e.isTrusted) {
@@ -207,7 +211,23 @@ document.addEventListener('click', function(e) {
         return;
     }
 
-    if (e.target !== kpxcAutocomplete.input && (e.target.nodeName !== kpxcAutocomplete.input.nodeName)) {
+    if (e.target !== kpxcAutocomplete.input &&
+        !e.target.classList.contains('kpxc-username-icon') &&
+        e.target.nodeName !== kpxcAutocomplete.input.nodeName) {
         kpxcAutocomplete.closeList(e.target);
+    }
+});
+
+// Handle autocomplete position on window resize
+window.addEventListener('resize', function() {
+    if (kpxcAutocomplete.input) {
+        kpxcAutocomplete.updatePosition(kpxcAutocomplete.input);
+    }
+});
+
+// Handle autocomplete position on scroll
+window.addEventListener('scroll', function() {
+    if (kpxcAutocomplete.input) {
+        kpxcAutocomplete.updatePosition(kpxcAutocomplete.input);
     }
 });

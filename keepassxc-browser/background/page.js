@@ -4,7 +4,7 @@ const defaultSettings = {
     checkUpdateKeePassXC: 3,
     autoCompleteUsernames: true,
     autoFillAndSend: false,
-    usePasswordGenerator: true,
+    usePasswordGeneratorIcons: false,
     autoFillSingleEntry: false,
     autoSubmit: false,
     autoRetrieveCredentials: true,
@@ -21,6 +21,8 @@ page.tabs = [];
 page.currentTabId = -1;
 page.blockedTabs = [];
 page.loginId = -1;
+page.submitted = false;
+page.submittedCredentials = {};
 
 page.initSettings = function() {
     return new Promise((resolve, reject) => {
@@ -35,8 +37,8 @@ page.initSettings = function() {
             if (!('autoFillAndSend' in page.settings)) {
                 page.settings.autoFillAndSend = defaultSettings.autoFillAndSend;
             }
-            if (!('usePasswordGenerator' in page.settings)) {
-                page.settings.usePasswordGenerator = defaultSettings.usePasswordGenerator;
+            if (!('usePasswordGeneratorIcons' in page.settings)) {
+                page.settings.usePasswordGeneratorIcons = defaultSettings.usePasswordGeneratorIcons;
             }
             if (!('autoFillSingleEntry' in page.settings)) {
                 page.settings.autoFillSingleEntry = defaultSettings.autoFillSingleEntry;

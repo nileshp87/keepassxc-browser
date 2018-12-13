@@ -12,15 +12,6 @@ var isFirefox = function() {
     return navigator.userAgent.indexOf('Firefox') !== -1 || navigator.userAgent.indexOf('Gecko/') !== -1;
 };
 
-var showNotification = function(message) {
-    browser.notifications.create({
-        'type': 'basic',
-        'iconUrl': browser.extension.getURL('icons/keepassxc_64x64.png'),
-        'title': 'KeePassXC-Browser',
-        'message': message
-    });
-};
-
 /**
  * Transforms a valid match pattern into a regular expression
  * which matches all URLs included by that pattern.
@@ -71,6 +62,8 @@ var matchPatternToRegExp = function(pattern) {
     }
 
     if (path) {
+        path = trimURL(path);
+
         if (path === '*') {
             regex += '(/.*)?';
         } else if (path.charAt(0) !== '/') {
@@ -96,4 +89,9 @@ var slashNeededForUrl = function(pattern) {
 
 function tr(key, params) {
     return browser.i18n.getMessage(key, params);
+}
+
+// Removes everything after '?' from URL
+var trimURL = function(url) {
+    return url.indexOf('?') !== -1 ? url.split('?')[0] : url;
 }

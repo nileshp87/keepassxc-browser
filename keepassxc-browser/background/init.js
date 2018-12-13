@@ -18,7 +18,6 @@ keepass.migrateKeyRing().then(() => {
  */
 browser.tabs.onCreated.addListener((tab) => {
     if (tab.id > 0) {
-        //console.log('browser.tabs.onCreated(' + tab.id+ ')');
         if (tab.selected) {
             page.currentTabId = tab.id;
             kpxcEvent.invoke(page.switchTab, null, tab.id, []);
@@ -46,13 +45,11 @@ browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
 browser.tabs.onActivated.addListener((activeInfo) => {
     // Remove possible credentials from old tab information
     page.clearCredentials(page.currentTabId, true);
-    browserAction.removeRememberPopup(null, { 'id': page.currentTabId }, true);
 
     browser.tabs.get(activeInfo.tabId).then((info) => {
         if (info && info.id) {
             page.currentTabId = info.id;
             if (info.status === 'complete') {
-                //console.log('kpxcEvent.invoke(page.switchTab, null, '+info.id + ', []);');
                 kpxcEvent.invoke(page.switchTab, null, info.id, []);
             }
         }
@@ -72,7 +69,6 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     if (changeInfo.status === 'complete') {
         browserAction.showDefault(null, tab);
-        kpxcEvent.invoke(browserAction.removeRememberPopup, null, tabId, []);
     }
 });
 
@@ -82,7 +78,6 @@ const contextMenuItems = [
     { title: tr('contextMenuFillUsernameAndPassword'), action: 'fill_username_password' },
     { title: tr('contextMenuFillPassword'), action: 'fill_password' },
     { title: tr('contextMenuFillTOTP'), action: 'fill_totp' },
-    { title: tr('contextMenuShowPasswordGeneratorIcons'), action: 'activate_password_generator' },
     { title: tr('contextMenuShowPasswordGenerator'), action: 'show_password_generator' },
     { title: tr('contextMenuSaveCredentials'), action: 'remember_credentials' }
 ];

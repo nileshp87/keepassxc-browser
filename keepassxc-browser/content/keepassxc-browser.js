@@ -4,7 +4,7 @@
 var _called = {};
 _called.retrieveCredentials = false;
 _called.clearLogins = false;
-_called.manualFillRequested = 'none';
+_called.manualFillRequested = 'none'; // Values: none, pass, both
 let _singleInputEnabledForPage = false;
 const _maximumInputs = 100;
 
@@ -68,8 +68,6 @@ browser.runtime.onMessage.addListener(function(req, sender) {
             kpxc.ignoreSite(req.args);
         } else if (req.action === 'check_database_hash' && 'hash' in req) {
             kpxc.detectDatabaseChange(req.hash);
-        } else if (req.action === 'activate_password_generator') {
-            kpxc.initPasswordGenerator(kpxcFields.getAllFields());
         } else if (req.action === 'remember_credentials') {
             kpxc.contextMenuRememberCredentials();
         } else if (req.action === 'choose_credential_fields') {
@@ -131,10 +129,10 @@ kpxcForm.setInputFields = function(form, credentialFields) {
     form.setAttribute('kpxcPassword', credentialFields.password);
 };
 
-kpxcForm.onSubmit = function() {
+kpxcForm.onSubmit = async function() {
     const form = this.nodeName === 'FORM' ? this : this.form;
-    const usernameId = form.getAttribute('kpxcUsername');
-    const passwordId = form.getAttribute('kpxcPassword');
+    const usernameId = this.getAttribute('kpxcUsername');
+    const passwordId = this.getAttribute('kpxcPassword');
 
     let usernameValue = '';
     let passwordValue = '';
@@ -149,7 +147,23 @@ kpxcForm.onSubmit = function() {
         passwordValue = passwordField.value;
     }
 
-    kpxc.rememberCredentials(usernameValue, passwordValue);
+    // Return if credentials are already found
+    if (kpxc.credentials.some(c => c.login === usernameValue && c.password === passwordValue)) {
+        return;
+    }
+
+    // Check if database is closed
+    const state = await browser.runtime.sendMessage({
+        action: 'get_database_hash',
+        args: [ true ]
+    });
+
+    if (state !== '') {
+        browser.runtime.sendMessage({
+            action: 'page_set_submitted',
+            args: [ true, usernameValue, passwordValue, trimURL(window.top.location.href) ]
+        });
+    }
 };
 
 
@@ -427,6 +441,7 @@ kpxcFields.getUsernameField = function(passwordId, checkDisabled) {
                 return true; // Continue
             }
 
+            kpxcUsernameField.initField(usernameField);
             usernameField = i;
         }
     } else {
@@ -483,10 +498,8 @@ kpxcFields.getPasswordField = function(usernameId, checkDisabled) {
             passwordField = null;
         }
 
-        if (kpxc.settings.usePasswordGenerator) {
-            kpxcPassword.init();
-            kpxcPassword.initField(passwordField);
-        }
+        kpxcPassword.init(kpxc.settings.usePasswordGeneratorIcons);
+        kpxcPassword.initField(passwordField);
     } else {
         // Search all inputs on page
         const inputs = kpxcFields.getAllFields();
@@ -530,9 +543,21 @@ kpxcFields.prepareCombinations = function(combinations) {
             });
         }
 
-        // Initialize form-submit for remembering credentials
         const fieldId = c.password || c.username;
         const field = _f(fieldId);
+
+        // If no username field is found, handle the single password field as such
+        const usernameField = c.username ? _f(c.username) : field;
+
+        // Change icon for username field
+        browser.runtime.sendMessage({
+            action: 'get_status',
+            args: [ true ]
+        }).then((res) => {
+            kpxcUsernameField.initField(usernameField, res.databaseClosed);
+        });
+
+        // Initialize form-submit for remembering credentials
         if (field) {
             const form = field.closest('form');
             if (form && form.length > 0) {
@@ -757,9 +782,17 @@ kpxc.credentials = [];
 const initcb = function() {
     browser.runtime.sendMessage({
         action: 'load_settings'
-    }).then((response) => {
+    }).then(async(response) => {
         kpxc.settings = response;
         kpxc.initCredentialFields();
+
+        browser.runtime.sendMessage({ action: 'page_get_submitted' }).then((credentials) => {
+            if (credentials && credentials.submitted) {
+                browser.runtime.sendMessage({ action: 'page_set_submitted', args: [ false, '', '' ] }).then(() => {
+                    kpxc.rememberCredentials(credentials.username, credentials.password, credentials.url);
+                });
+            }
+        });
     });
 };
 
@@ -791,6 +824,8 @@ kpxc.clearAllFromPage = function() {
 // Switch credentials if database is changed or closed
 kpxc.detectDatabaseChange = function(response) {
     kpxc.clearAllFromPage();
+    kpxcUsernameField.switchIcon(true);
+
     if (document.visibilityState !== 'hidden') {
         if (response.new !== '' && response.new !== response.old) {
             _called.retrieveCredentials = false;
@@ -799,6 +834,7 @@ kpxc.detectDatabaseChange = function(response) {
             }).then((settings) => {
                 kpxc.settings = settings;
                 kpxc.initCredentialFields(true);
+                kpxcUsernameField.switchIcon(false); // Unlocked
 
                 // If user has requested a manual fill through context menu the actual credential filling
                 // is handled here when the opened database has been regognized. It's not a pretty hack.
@@ -881,13 +917,11 @@ kpxc.initCredentialFields = function(forceCall) {
 };
 
 kpxc.initPasswordGenerator = function(inputs) {
-    if (kpxc.settings.usePasswordGenerator) {
-        kpxcPassword.init();
+    kpxcPassword.init(kpxc.settings.usePasswordGeneratorIcons);
 
-        for (let i = 0; i < inputs.length; i++) {
-            if (inputs[i] && inputs[i].getAttribute('type') && inputs[i].getAttribute('type').toLowerCase() === 'password') {
-                kpxcPassword.initField(inputs[i], inputs, i);
-            }
+    for (let i = 0; i < inputs.length; i++) {
+        if (inputs[i] && inputs[i].getAttribute('type') && inputs[i].getAttribute('type').toLowerCase() === 'password') {
+            kpxcPassword.initField(inputs[i], inputs, i);
         }
     }
 };
@@ -918,7 +952,7 @@ kpxc.retrieveCredentialsCallback = function(credentials, dontAutoFillIn) {
 
     if (credentials && credentials.length > 0) {
         kpxc.credentials = credentials;
-        kpxc.prepareFieldsForCredentials(!Boolean(dontAutoFillIn));
+        kpxc.prepareFieldsForCredentials(!dontAutoFillIn);
         _called.retrieveCredentials = true;
     }
 };
@@ -1132,11 +1166,7 @@ kpxc.fillInFromActiveElement = function(suppressWarnings, passOnly = false) {
 
     if (passOnly) {
         if (!_f(combination.password)) {
-            const message = tr('fieldsNoPasswordField');
-            browser.runtime.sendMessage({
-                action: 'show_notification',
-                args: [ message ]
-            });
+            kpxcUI.createNotification('warning', tr('fieldsNoPasswordField'));
             return;
         }
     }
@@ -1222,11 +1252,7 @@ kpxc.setValueWithChange = function(field, value) {
 kpxc.fillIn = function(combination, onlyPassword, suppressWarnings) {
     // No credentials available
     if (kpxc.credentials.length === 0 && !suppressWarnings) {
-        const message = tr('credentialsNoLoginsFound');
-        browser.runtime.sendMessage({
-            action: 'show_notification',
-            args: [ message ]
-        });
+        kpxcUI.createNotification('error', tr('credentialsNoLoginsFound'));
         return;
     }
 
@@ -1261,11 +1287,7 @@ kpxc.fillIn = function(combination, onlyPassword, suppressWarnings) {
 
         if (!filledIn) {
             if (!suppressWarnings) {
-                const message = tr('fieldsFill');
-                browser.runtime.sendMessage({
-                    action: 'show_notification',
-                    args: [ message ]
-                });
+                kpxcUI.createNotification('error', tr('fieldsFill'));
             }
             return;
         }
@@ -1297,11 +1319,7 @@ kpxc.fillIn = function(combination, onlyPassword, suppressWarnings) {
 
         if (!filledIn) {
             if (!suppressWarnings) {
-                const message = tr('fieldsFill');
-                browser.runtime.sendMessage({
-                    action: 'show_notification',
-                    args: [ message ]
-                });
+                kpxcUI.createNotification('error', tr('fieldsFill'));
             }
             return;
         }
@@ -1361,11 +1379,7 @@ kpxc.fillIn = function(combination, onlyPassword, suppressWarnings) {
                 return;
             } else if (countPasswords < 1) {
                 if (!suppressWarnings) {
-                    const message = tr('credentialsNoUsernameFound');
-                    browser.runtime.sendMessage({
-                        action: 'show_notification',
-                        args: [ message ]
-                    });
+                    kpxcUI.createNotification('error', tr('credentialsNoUsernameFound'));
                 }
                 return;
             }
@@ -1423,20 +1437,22 @@ kpxc.contextMenuRememberCredentials = function() {
         passwordValue = passwordField.value;
     }
 
-    if (!kpxc.rememberCredentials(usernameValue, passwordValue)) {
-        const message = tr('rememberNothingChanged');
-        browser.runtime.sendMessage({
-            action: 'show_notification',
-            args: [ message ]
-        });
+    const result = kpxc.rememberCredentials(usernameValue, passwordValue);
+    if (result === undefined) {
+        kpxcUI.createNotification('error', tr('rememberNoPassword'));
+        return;
+    }
+
+    if (!result) {
+        kpxcUI.createNotification('warning', tr('rememberCredentialsExists'));
     }
 };
 
-kpxc.rememberCredentials = function(usernameValue, passwordValue) {
+kpxc.rememberCredentials = function(usernameValue, passwordValue, urlValue) {
     // No password given or field cleaned by a site-running script
     // --> no password to save
     if (passwordValue === '') {
-        return false;
+        return undefined;
     }
 
     let usernameExists = false;
@@ -1482,11 +1498,18 @@ kpxc.rememberCredentials = function(usernameValue, passwordValue) {
             }
         }
 
-        browser.runtime.sendMessage({
-            action: 'set_remember_credentials',
-            args: [ usernameValue, passwordValue, url, usernameExists, credentialsList ]
-        });
+        urlValue = urlValue || url;
 
+        // Show the banner
+        const credentials = {
+            username: usernameValue,
+            password: passwordValue,
+            url: urlValue,
+            usernameExists: usernameExists,
+            list: credentialsList
+        };
+
+        kpxcBanner.create(credentials);
         return true;
     }
 
@@ -1498,7 +1521,7 @@ kpxc.ignoreSite = function(sites) {
         return;
     }
 
-    let site = sites[0];
+    let site = trimURL(sites[0]);
     kpxc.initializeSitePreferences();
 
     if (slashNeededForUrl(site)) {
@@ -1563,9 +1586,16 @@ kpxcEvents.clearCredentials = function() {
     }
 };
 
-kpxcEvents.triggerActivatedTab = function() {
+kpxcEvents.triggerActivatedTab = async function() {
     // Doesn't run a second time because of _called.initCredentialFields set to true
     kpxc.init();
+
+    // Update username field lock state
+    const state = await browser.runtime.sendMessage({
+        action: 'get_database_hash',
+        args: [ true ]
+    });
+    kpxcUsernameField.switchIcon(state === '');
 
     // initCredentialFields calls also "retrieve_credentials", to prevent it
     // check of init() was already called

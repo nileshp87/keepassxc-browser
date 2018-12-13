@@ -4,12 +4,6 @@ if (jQuery) {
     var $ = jQuery.noConflict(true);
 }
 
-const defaultSettings = {
-    blinkTimeout: 7500,
-    redirectOffset: -1,
-    redirectAllowance: 1
-};
-
 $(function() {
     browser.runtime.sendMessage({ action: 'load_settings' }).then((settings) => {
         options.settings = settings;
@@ -139,10 +133,6 @@ options.initGeneralSettings = function() {
         }).then(options.showKeePassXCVersions);
     });
 
-    $('#blinkTimeout').val(options.settings['blinkTimeout']);
-    $('#blinkMinTimeout').val(options.settings['blinkMinTimeout']);
-    $('#allowedRedirect').val(options.settings['allowedRedirect']);
-
     browser.commands.getAll().then(function(commands) {
         commands.forEach(function(command) {
             var shortcut = document.getElementById(`${command.name}-shortcut`);
@@ -157,35 +147,6 @@ options.initGeneralSettings = function() {
         browser.tabs.create({
             url: isFirefox() ? browser.runtime.getURL('options/shortcuts.html') : 'chrome://extensions/configureCommands'
         });
-    });
-
-    $('#blinkTimeoutButton').click(function() {
-        const input = document.querySelector('#blinkTimeout');
-        if (!input.validity.valid) {
-            options.createWarning(input, tr('optionsErrorInvalidValue'));
-        }
-
-        const blinkTimeout = input.value;
-        const blinkTimeoutval = blinkTimeout !== '' ? Number(blinkTimeout) : defaultSettings.blinkTimeout;
-
-        options.settings['blinkTimeout'] = blinkTimeoutval;
-        options.saveSetting('blinkTimeout');
-    });
-
-    $('#blinkMinTimeoutButton').click(function() {
-        const blinkMinTimeout = $.trim($('#blinkMinTimeout').val());
-        const blinkMinTimeoutval = blinkMinTimeout !== '' ? Number(blinkMinTimeout) : defaultSettings.redirectOffset;
-
-        options.settings['blinkMinTimeout'] = blinkMinTimeoutval;
-        options.saveSetting('blinkMinTimeout');
-    });
-
-    $('#allowedRedirectButton').click(function() {
-        const allowedRedirect = $.trim($('#allowedRedirect').val());
-        const allowedRedirectval = allowedRedirect !== '' ? Number(allowedRedirect) : defaultSettings.redirectAllowance;
-
-        options.settings['allowedRedirect'] = allowedRedirectval;
-        options.saveSetting('allowedRedirect');
     });
 
     $('#defaultGroupButton').click(function() {

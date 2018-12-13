@@ -11,41 +11,18 @@ kpxcPassword.diffX = 0;
 kpxcPassword.diffY = 0;
 kpxcPassword.dialog = null;
 kpxcPassword.titleBar = null;
+kpxcPassword.useIcons = false;
 
-const DOMRectToArray = function(domRect) {
-    return [ domRect.bottom, domRect.height, domRect.left, domRect.right, domRect.top, domRect.width, domRect.x, domRect.y ];
-};
-
-/**
-* Detects if the input field appears or disappears -> show/hide the icon
-* - boundingClientRect with slightly (< -10) negative values -> hidden
-* - intersectionRatio === 0 -> hidden
-* - isIntersecting === false -> hidden
-* - intersectionRatio > 0 -> shown
-* - isIntersecting === true -> shown
-*/
 try {
     kpxcPassword.observer = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-            const rect = DOMRectToArray(entry.boundingClientRect);
-
-            if ((entry.intersectionRatio === 0 && !entry.isIntersecting) || (rect.some(x => x < -10))) {
-                kpxcPassword.icon.style.display = 'none';
-            } else if (entry.intersectionRatio > 0 && entry.isIntersecting) {
-                kpxcPassword.icon.style.display = 'block';
-
-                // Wait for possible DOM animations
-                setTimeout(() => {
-                    kpxcPassword.setIconPosition(kpxcPassword.icon, entry.target);
-                }, 500);
-            }
-        }
+        kpxcUI.updateFromIntersectionObserver(kpxcPassword, entries);
     });
 } catch (err) {
     console.log(err);
 }
 
-kpxcPassword.init = function() {
+kpxcPassword.init = function(useIcons) {
+    kpxcPassword.useIcons = useIcons;
     if ('initPasswordGenerator' in _called) {
         return;
     }
@@ -58,18 +35,20 @@ kpxcPassword.initField = function(field, inputs, pos) {
         return;
     }
 
-    // Observer the visibility
-    if (kpxcPassword.observer) {
-        kpxcPassword.observer.observe(field);
-    }
-
     if (field.getAttribute('kpxc-password-generator')) {
         return;
     }
 
     field.setAttribute('kpxc-password-generator', true);
 
-    kpxcPassword.createIcon(field);
+    if (kpxcPassword.useIcons) {
+        // Observer the visibility
+        if (kpxcPassword.observer) {
+            kpxcPassword.observer.observe(field);
+        }
+        kpxcPassword.createIcon(field);
+    }
+
     kpxcPassword.inputField = field;
 
     let found = false;
@@ -110,18 +89,20 @@ kpxcPassword.createIcon = function(field) {
         kpxcPassword.showDialog(field, icon);
     });
 
-    kpxcPassword.setIconPosition(icon, field);
+    kpxcUI.setIconPosition(icon, field);
     kpxcPassword.icon = icon;
     document.body.appendChild(icon);
 };
 
-kpxcPassword.setIconPosition = function(icon, field) {
-    const rect = field.getBoundingClientRect();
-    const offset = Number(icon.getAttribute('offset'));
-    const size = Number(icon.getAttribute('size'));
-
-    icon.style.top = String((rect.top + document.scrollingElement.scrollTop) + offset + 1) + 'px';
-    icon.style.left = String((rect.left + document.scrollingElement.scrollLeft) + field.offsetWidth - size - offset) + 'px';
+kpxcPassword.removeIcon = function(field) {
+    if (field.getAttribute('kpxc-password-generator')) {
+        const pwgenIcons = document.querySelectorAll('.kpxc-pwgen-icon');
+        for (const i of pwgenIcons) {
+            if (i.getAttribute('kpxc-pwgen-field-id') === field.getAttribute('data-kpxc-id')) {
+                document.body.removeChild(i);
+            }
+        }
+    }
 };
 
 kpxcPassword.createDialog = function() {
@@ -177,8 +158,14 @@ kpxcPassword.createDialog = function() {
     wrapper.append(dialog);
 
     const icon = $('.kpxc-pwgen-icon');
-    dialog.style.top = String(icon.offsetTop + icon.offsetHeight) + 'px';
-    dialog.style.left = icon.style.left;
+    if (icon) {
+        dialog.style.top = String(icon.offsetTop + icon.offsetHeight) + 'px';
+        dialog.style.left = icon.style.left;
+    } else {
+        const rect = document.activeElement.getBoundingClientRect();
+        dialog.style.top = String(rect.top + rect.height) + 'px';
+        dialog.style.left = rect.left + 'px';
+    }
 
     document.body.append(wrapper);
 
@@ -209,7 +196,7 @@ kpxcPassword.openDialog = function() {
 };
 
 kpxcPassword.trigger = function() {
-    kpxcPassword.showDialog(kpxcPassword.inputField, kpxcPassword.icon);
+    kpxcPassword.showDialog(kpxcPassword.inputField || document.activeElement, kpxcPassword.icon);
 };
 
 kpxcPassword.showDialog = function(field, icon) {
@@ -224,8 +211,14 @@ kpxcPassword.showDialog = function(field, icon) {
 
     // Adjust the dialog location
     if (kpxcPassword.dialog) {
-        kpxcPassword.dialog.style.top = String(icon.offsetTop + icon.offsetHeight) + 'px';
-        kpxcPassword.dialog.style.left = icon.style.left;
+        if (icon) {
+            kpxcPassword.dialog.style.top = String(icon.offsetTop + icon.offsetHeight) + 'px';
+            kpxcPassword.dialog.style.left = icon.style.left;
+        } else {
+            const rect = document.activeElement.getBoundingClientRect();
+            kpxcPassword.dialog.style.top = String(rect.top + rect.height) + 'px';
+            kpxcPassword.dialog.style.left = rect.left + 'px';
+        }
 
         kpxcPassword.dialog.setAttribute('kpxc-pwgen-field-id', field.getAttribute('data-kpxc-id'));
         kpxcPassword.dialog.setAttribute('kpxc-pwgen-next-field-id', field.getAttribute('kpxc-pwgen-next-field-id'));
@@ -382,16 +375,12 @@ kpxcPassword.disableButtons = function() {
 
 // Handle icon position on window resize
 window.addEventListener('resize', function(e) {
-    if (kpxcPassword.inputField && kpxcPassword.icon) {
-        kpxcPassword.setIconPosition(kpxcPassword.icon, kpxcPassword.inputField);
-    }
+    kpxcUI.updateIconPosition(kpxcPassword);
 });
 
 // Handle icon position on scroll
 window.addEventListener('scroll', function(e) {
-    if (kpxcPassword.inputField && kpxcPassword.icon) {
-        kpxcPassword.setIconPosition(kpxcPassword.icon, kpxcPassword.inputField);
-    }
+    kpxcUI.updateIconPosition(kpxcPassword);
 });
 
 // Closes the dialog when clicked outside of it)

@@ -31,6 +31,83 @@ kpxcUI.createElement = function(type, classes, attributes, textContent) {
     return element;
 };
 
+kpxcUI.updateIconPosition = function(iconClass) {
+    if (iconClass.inputField && iconClass.icon) {
+        kpxcUI.setIconPosition(iconClass.icon, iconClass.inputField);
+    }
+};
+
+kpxcUI.setIconPosition = function(icon, field) {
+    const rect = field.getBoundingClientRect();
+    const offset = Number(icon.getAttribute('offset'));
+    const size = Number(icon.getAttribute('size'));
+
+    icon.style.top = String((rect.top + document.scrollingElement.scrollTop) + offset + 1) + 'px';
+    icon.style.left = String((rect.left + document.scrollingElement.scrollLeft) + field.offsetWidth - size - offset) + 'px';
+};
+
+/**
+* Detects if the input field appears or disappears -> show/hide the icon
+* - boundingClientRect with slightly (< -10) negative values -> hidden
+* - intersectionRatio === 0 -> hidden
+* - isIntersecting === false -> hidden
+* - intersectionRatio > 0 -> shown
+* - isIntersecting === true -> shown
+*/
+kpxcUI.updateFromIntersectionObserver = function(iconClass, entries) {
+    for (const entry of entries) {
+        const rect = DOMRectToArray(entry.boundingClientRect);
+
+        if ((entry.intersectionRatio === 0 && !entry.isIntersecting) || (rect.some(x => x < -10))) {
+            iconClass.icon.style.display = 'none';
+        } else if (entry.intersectionRatio > 0 && entry.isIntersecting) {
+            iconClass.icon.style.display = 'block';
+
+            // Wait for possible DOM animations
+            setTimeout(() => {
+                kpxcUI.setIconPosition(iconClass.icon, entry.target);
+            }, 500);
+        }
+    }
+};
+
+/**
+ * Creates a self-disappearing notification banner to DOM
+ * @param {string} type     Notification type: (success, info, warning, error)
+ * @param {string} message  The message shown
+ */
+kpxcUI.createNotification = function(type, message) {
+    if (!kpxc.settings.showNotifications || !type || !message) {
+        return;
+    }
+
+    const banner = kpxcUI.createElement('div', 'kpxc-notification kpxc-notification-' + type, {});
+    type = type.charAt(0).toUpperCase() + type.slice(1) + '!';
+
+    const className = (isFirefox() ? 'kpxc-banner-icon-moz' : 'kpxc-banner-icon');
+    const icon = kpxcUI.createElement('span', className, { 'alt': 'logo' });
+    const label = kpxcUI.createElement('span', 'kpxc-label', {}, type);
+    const msg = kpxcUI.createElement('span', '', {}, message);
+
+    banner.addEventListener('click', function() {
+        document.body.removeChild(banner);
+    });
+
+    banner.appendMultiple(icon, label, msg);
+    document.body.appendChild(banner);
+
+    // Destroy the banner after five seconds
+    setTimeout(() => {
+        if ($('.kpxc-notification')) {
+            document.body.removeChild(banner);
+        }
+    }, 5000);
+};
+
+const DOMRectToArray = function(domRect) {
+    return [ domRect.bottom, domRect.height, domRect.left, domRect.right, domRect.top, domRect.width, domRect.x, domRect.y ];
+};
+
 // Enables dragging
 document.addEventListener('mousemove', function(e) {
     if (kpxcPassword.selected === kpxcPassword.titleBar) {

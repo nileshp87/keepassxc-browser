@@ -78,12 +78,6 @@ kpxcEvent.invoke = function(handler, callback, senderTabId, args, secondTime) {
     });
 };
 
-kpxcEvent.onShowNotification = function(callback, tab, message) {
-    if (page.settings.showNotifications) {
-        showNotification(message);
-    }
-};
-
 kpxcEvent.showStatus = function(configured, tab, callback) {
     let keyId = null;
     if (configured && keepass.databaseHash !== '') {
@@ -165,7 +159,7 @@ kpxcEvent.onReconnect = async function(callback, tab) {
 };
 
 kpxcEvent.lockDatabase = function(callback, tab) {
-    keepass.lockDatabase(tab).then(() => {
+    keepass.lockDatabase(tab).then((response) => {
         kpxcEvent.showStatus(true, tab, callback);
     });
 };
@@ -209,20 +203,6 @@ kpxcEvent.onUpdateAvailableKeePassXC = function(callback, tab) {
 kpxcEvent.onRemoveCredentialsFromTabInformation = function(callback, tab) {
     const id = tab.id || page.currentTabId;
     page.clearCredentials(id);
-};
-
-kpxcEvent.onSetRememberPopup = function(callback, tab, username, password, url, usernameExists, credentialsList) {
-    keepass.testAssociation((response) => {
-        if (response) {
-            keepass.isConfigured().then((configured) => {
-                if (configured) {
-                    browserAction.setRememberPopup(tab.id, username, password, url, usernameExists, credentialsList);
-                }
-            }).catch((e) => {
-                console.log(e);
-            });
-        }
-    }, tab);
 };
 
 kpxcEvent.onLoginPopup = function(callback, tab, logins) {
@@ -277,6 +257,18 @@ kpxcEvent.pageSetLoginId = function(callback, tab, loginId) {
     page.loginId = loginId;
 };
 
+kpxcEvent.pageGetSubmitted = function(callback, tab) {
+    callback(page.submittedCredentials);
+};
+
+kpxcEvent.pageSetSubmitted = function(callback, tab, submitted, username, password, url) {
+    page.submittedCredentials.submitted = submitted;
+    page.submittedCredentials.username = username;
+    page.submittedCredentials.password = password;
+    page.submittedCredentials.url = url;
+    callback();
+};
+
 // All methods named in this object have to be declared BEFORE this!
 kpxcEvent.messageHandlers = {
     'add_credentials': keepass.addCredentials,
@@ -287,6 +279,7 @@ kpxcEvent.messageHandlers = {
     'disable_automatic_reconnect': keepass.disableAutomaticReconnect,
     'generate_password': keepass.generatePassword,
     'get_connected_database': kpxcEvent.onGetConnectedDatabase,
+    'get_database_hash': keepass.getDatabaseHash,
     'get_database_groups': keepass.getDatabaseGroups,
     'get_keepassxc_versions': kpxcEvent.onGetKeePassXCVersions,
     'get_status': kpxcEvent.onGetStatus,
@@ -298,6 +291,8 @@ kpxcEvent.messageHandlers = {
     'page_clear_logins': kpxcEvent.pageClearLogins,
     'page_get_login_id': kpxcEvent.pageGetLoginId,
     'page_set_login_id': kpxcEvent.pageSetLoginId,
+    'page_get_submitted': kpxcEvent.pageGetSubmitted,
+    'page_set_submitted': kpxcEvent.pageSetSubmitted,
     'pop_stack': kpxcEvent.onPopStack,
     'popup_login': kpxcEvent.onLoginPopup,
     'popup_multiple-fields': kpxcEvent.onMultipleFieldsPopup,
@@ -307,8 +302,5 @@ kpxcEvent.messageHandlers = {
     'show_default_browseraction': browserAction.showDefault,
     'update_credentials': keepass.updateCredentials,
     'save_settings': kpxcEvent.onSaveSettings,
-    'set_remember_credentials': kpxcEvent.onSetRememberPopup,
-    'show_notification': kpxcEvent.onShowNotification,
-    'stack_add': browserAction.stackAdd,
     'update_available_keepassxc': kpxcEvent.onUpdateAvailableKeePassXC
 };
