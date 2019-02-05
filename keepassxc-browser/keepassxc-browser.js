@@ -89,8 +89,7 @@ browser.runtime.onMessage.addListener(function(req, sender, callback) {
             });
         } else if (req.action === 'ignore-site') {
             cip.ignoreSite(req.args);
-        }
-        else if (req.action === 'check_database_hash' && 'hash' in req) {
+        } else if (req.action === 'check_database_hash' && 'hash' in req) {
             cip.detectDatabaseChange(req.hash);
         }
     }
@@ -1528,6 +1527,11 @@ cip.initPasswordGenerator = function(inputs) {
 cip.receiveCredentialsIfNecessary = function() {
     return new Promise((resolve, reject) => {
         if (cip.credentials.length === 0 && _called.retrieveCredentials === false) {
+            if (!cip.url) {
+                cip.url = document.defaultView.location.origin;
+            }
+            console.log('Url: ' + cip.url);
+
             browser.runtime.sendMessage({
                 action: 'retrieve_credentials',
                 args: [ cip.url, cip.submitUrl, false, true ] // Sets triggerUnlock to true

@@ -100,9 +100,7 @@ for (const item of contextMenuItems) {
         title: item.title,
         contexts: menuContexts,
         onclick: (info, tab) => {
-            browser.tabs.sendMessage(tab.id, {
-                action: item.action
-            }).catch((e) => {console.log(e);});
+            executeAction(item.action, tab, info);
         }
     });
 }
@@ -112,7 +110,7 @@ browser.commands.onCommand.addListener((command) => {
     if (command === 'fill-username-password') {
         browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
             if (tabs.length) {
-                browser.tabs.sendMessage(tabs[0].id, { action: 'fill_user_pass' });
+                executeAction('fill_user_pass', tabs[0]);
             }
         });
     }
@@ -120,7 +118,7 @@ browser.commands.onCommand.addListener((command) => {
     if (command === 'fill-password') {
         browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
             if (tabs.length) {
-                browser.tabs.sendMessage(tabs[0].id, { action: 'fill_pass_only' });
+                executeAction('fill_pass_only', tabs[0]);
             }
         });
     }
@@ -128,8 +126,46 @@ browser.commands.onCommand.addListener((command) => {
     if (command === 'fill-totp') {
         browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
             if (tabs.length) {
-                browser.tabs.sendMessage(tabs[0].id, { action: 'fill_totp' });
+                executeAction('fill_totp', tabs[0]);
             }
         });
     }
 });
+
+// Execute action to a certain frame or to the main page
+function executeAction(action, tab, info) {
+    console.log(info);
+    console.log(tab);
+    if (tab) {
+        browser.webNavigation.getAllFrames({ tabId: tab.id }).then((frameInfo, err) => {
+            console.log(frameInfo);
+            if (err) {
+                console.log(err);
+                return;
+            }
+
+            // No frames, just the main page
+            if (frameInfo.length === 1) {
+                browser.tabs.sendMessage(tab.id, {
+                    action: action
+                }).catch((e) => {
+                    console.log(e);
+                });
+                return;
+            }
+
+            // Find the correct frame (doesn't work properly if the URL differs)
+            for (const f of frameInfo) {
+                if (!f.errorOccurred && f.frameId > 0 && f.parentFrameId >= 0 &&
+                    ((info && f.url === info.pageUrl) || tab.url === f.url)) {
+                    console.log('Correct one:');
+                    console.log(f);
+
+                    browser.tabs.sendMessage(tab.id, { action: action }, { frameId: f.frameId }).catch((e) => {
+                        console.log(e);
+                    });
+                }
+            }
+        });
+    }
+};
