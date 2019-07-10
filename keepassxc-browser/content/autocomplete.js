@@ -52,6 +52,10 @@ kpxcAutocomplete.showList = function(inputField) {
 
             // Save index for combination.loginId
             const index = Array.prototype.indexOf.call(e.currentTarget.parentElement.childNodes, e.currentTarget);
+            browser.runtime.sendMessage({
+                action: 'page_set_login_id', args: [ index ]
+            });
+
             inputField.value = this.getElementsByTagName('input')[0].value;
             kpxcAutocomplete.fillPassword(inputField.value, index);
             kpxcAutocomplete.closeList();
@@ -194,6 +198,10 @@ kpxcAutocomplete.fillPassword = function(value, index) {
 
 kpxcAutocomplete.updatePosition = function(inputField, elem) {
     const div = elem || $('.kpxcAutocomplete-items');
+    if (!div) {
+        return;
+    }
+
     const rect = inputField.getBoundingClientRect();
     div.style.top = String((rect.top + document.scrollingElement.scrollTop) + inputField.offsetHeight) + 'px';
     div.style.left = String((rect.left + document.scrollingElement.scrollLeft)) + 'px';
@@ -220,6 +228,10 @@ document.addEventListener('click', function(e) {
 
 // Handle autocomplete position on window resize
 window.addEventListener('resize', function() {
+    if (!kpxc.settings.autoCompleteUsernames) {
+        return;
+    }
+
     if (kpxcAutocomplete.input) {
         kpxcAutocomplete.updatePosition(kpxcAutocomplete.input);
     }
@@ -227,6 +239,10 @@ window.addEventListener('resize', function() {
 
 // Handle autocomplete position on scroll
 window.addEventListener('scroll', function() {
+    if (!kpxc.settings.autoCompleteUsernames) {
+        return;
+    }
+
     if (kpxcAutocomplete.input) {
         kpxcAutocomplete.updatePosition(kpxcAutocomplete.input);
     }

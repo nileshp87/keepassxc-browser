@@ -33,6 +33,7 @@ kpxcBanner.create = async function(credentials = {}) {
         action: 'get_database_hash',
         args: [ true ]
     });
+
     if (state === '') {
         kpxcUI.createNotification('error', tr('rememberErrorDatabaseClosed'));
         return;
@@ -138,6 +139,11 @@ kpxcBanner.saveNewCredentials = function(credentials = {}) {
             // Another group name has been specified
             const [ gname, guuid ] = kpxcBanner.getDefaultGroup(result.groups[0].children, result.defaultGroup);
             if (gname === '' && guuid === '') {
+                // Root group is used -> use the root path
+                if (result.defaultGroup.toLowerCase() === 'root') {
+                    result.defaultGroup = '/';
+                }
+
                 // Create a new group
                 browser.runtime.sendMessage({
                     action: 'create_new_group',

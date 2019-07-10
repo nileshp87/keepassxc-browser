@@ -1176,30 +1176,27 @@ kpxc.fillInFromActiveElement = function(suppressWarnings, passOnly = false) {
     kpxc.fillInCredentials(combination, passOnly, suppressWarnings);
 };
 
-kpxc.fillInFromActiveElementTOTPOnly = function() {
+kpxc.fillInFromActiveElementTOTPOnly = async function() {
     const el = document.activeElement;
     kpxcFields.setUniqueId(el);
     const fieldId = kpxcFields.prepareId(el.getAttribute('data-kpxc-id'));
 
-    browser.runtime.sendMessage({
-        action: 'page_get_login_id'
-    }).then((pos) => {
-        if (pos >= 0 && kpxc.credentials[pos]) {
-            // Check the value from stringFields (to be removed)
-            const currentField = _fs(fieldId);
-            if (kpxc.credentials[pos].stringFields && kpxc.credentials[pos].stringFields.length > 0) {
-                const stringFields = kpxc.credentials[pos].stringFields;
-                for (const s of stringFields) {
-                    const val = s['KPH: {TOTP}'];
-                    if (val) {
-                        kpxc.setValue(currentField, val);
-                    }
+    const index = await kpxc.sendMessage('page_get_login_id');
+    if (index >= 0 && kpxc.credentials[index]) {
+        // Check the value from stringFields (to be removed)
+        const currentField = _fs(fieldId);
+        if (kpxc.credentials[index].stringFields && kpxc.credentials[index].stringFields.length > 0) {
+            const stringFields = kpxc.credentials[index].stringFields;
+            for (const s of stringFields) {
+                const val = s['KPH: {TOTP}'];
+                if (val) {
+                    kpxc.setValue(currentField, val);
                 }
-            } else if (kpxc.credentials[pos].totp && kpxc.credentials[pos].totp.length > 0) {
-                kpxc.setValue(currentField, kpxc.credentials[pos].totp);
             }
+        } else if (kpxc.credentials[index].totp && kpxc.credentials[index].totp.length > 0) {
+            kpxc.setValue(currentField, kpxc.credentials[index].totp);
         }
-    });
+    }
 };
 
 kpxc.setValue = function(field, value) {
@@ -1433,6 +1430,7 @@ kpxc.contextMenuRememberCredentials = function() {
     if (usernameField) {
         usernameValue = usernameField.value;
     }
+
     if (passwordField) {
         passwordValue = passwordField.value;
     }
@@ -1448,7 +1446,7 @@ kpxc.contextMenuRememberCredentials = function() {
     }
 };
 
-kpxc.rememberCredentials = function(usernameValue, passwordValue, urlValue) {
+kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue) {
     // No password given or field cleaned by a site-running script
     // --> no password to save
     if (passwordValue === '') {
@@ -1499,6 +1497,18 @@ kpxc.rememberCredentials = function(usernameValue, passwordValue, urlValue) {
         }
 
         urlValue = urlValue || url;
+
+        // Set usernameValue to the first one in the list, or the selected entry
+        if (usernameValue === '') {
+            if (credentialsList.length === 1) {
+                usernameValue = credentialsList[0].login;
+            } else if (credentialsList.length > 1) {
+                const index = await kpxc.sendMessage('page_get_login_id');
+                if (index >= 0) {
+                    usernameValue = credentialsList[index].login;
+                }
+            }
+        }
 
         // Show the banner
         const credentials = {
@@ -1591,10 +1601,7 @@ kpxcEvents.triggerActivatedTab = async function() {
     kpxc.init();
 
     // Update username field lock state
-    const state = await browser.runtime.sendMessage({
-        action: 'get_database_hash',
-        args: [ true ]
-    });
+    const state = await kpxc.sendMessage('get_database_hash', [ true ]);
     kpxcUsernameField.switchIcon(state === '');
 
     // initCredentialFields calls also "retrieve_credentials", to prevent it
@@ -1607,4 +1614,16 @@ kpxcEvents.triggerActivatedTab = async function() {
             console.log(e);
         });
     }
+};
+
+// An async wrapper, to be replaced in the future (async/await implementation)
+kpxc.sendMessage = async function(action, args = []) {
+    return new Promise((resolve) => {
+        browser.runtime.sendMessage({
+            action: action,
+            args: args
+        }).then((index) => {
+            resolve(index);
+        });
+    });
 };
