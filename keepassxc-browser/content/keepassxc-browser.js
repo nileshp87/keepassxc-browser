@@ -117,12 +117,13 @@ kpxcForm.destroy = function(form, credentialFields) {
         const field = _f(credentialFields.password) || _f(credentialFields.username);
         if (field) {
             form = kpxc.getForm(field);
+            if (form && form.length > 0) {
+                form.removeEventListener('submit', kpxcForm.onSubmit);
+            }
         }
     }
 
-    if (form && form.length > 0) {
-        form.removeEventListener('submit', kpxcForm.onSubmit);
-    }
+    kpxcForm.passwordInputs = [];
 };
 
 kpxcForm.setInputFields = function(form, credentialFields) {
@@ -148,17 +149,9 @@ kpxcForm.onSubmit = async function() {
         usernameValue = usernameField.value || usernameField.placeholder;
     }
 
-    // Password change form with three elements: Current, New, Repeat New
+    // Check if the form has three password fields -> a possible password change form
     if (kpxcForm.passwordInputs.length === 3) {
-        const current = kpxcForm.passwordInputs[0].value;
-        const newPass = kpxcForm.passwordInputs[1].value;
-        const repeatNew = kpxcForm.passwordInputs[2].value;
-        if (current !== newPass && newPass !== '' && newPass === repeatNew) {
-            passwordValue = newPass;
-        } else if (current === newPass && repeatNew !== newPass) {
-            // Reverse form where current is at the bottom
-            passwordValue = repeatNew;
-        }
+        passwordValue = kpxcForm.getNewPassword();
     } else if (passwordField) {
         // Use the combination password field instead
         passwordValue = passwordField.value;
@@ -175,6 +168,25 @@ kpxcForm.onSubmit = async function() {
     });
 };
 
+// Retrieve new password from a form with three elements: Current, New, Repeat New
+kpxcForm.getNewPassword = function() {
+    if (kpxcForm.passwordInputs.length < 3) {
+        return '';
+    }
+
+    const current = kpxcForm.passwordInputs[0].value;
+    const newPass = kpxcForm.passwordInputs[1].value;
+    const repeatNew = kpxcForm.passwordInputs[2].value;
+
+    if (current !== newPass && newPass !== '' && newPass === repeatNew) {
+        return newPass;
+    } else if (current === newPass && repeatNew !== newPass) {
+        // Reverse form where current password is at the bottom
+        return repeatNew;
+    }
+
+    return '';
+};
 
 var kpxcFields = {};
 
