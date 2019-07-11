@@ -203,6 +203,7 @@ kpxcEvent.onUpdateAvailableKeePassXC = function(callback, tab) {
 kpxcEvent.onRemoveCredentialsFromTabInformation = function(callback, tab) {
     const id = tab.id || page.currentTabId;
     page.clearCredentials(id);
+    page.clearSubmitted();
 };
 
 kpxcEvent.onLoginPopup = function(callback, tab, logins) {

@@ -29,11 +29,7 @@ kpxcBanner.create = async function(credentials = {}) {
     }
 
     // Check if database is closed
-    const state = await browser.runtime.sendMessage({
-        action: 'get_database_hash',
-        args: [ true ]
-    });
-
+    const state = await kpxc.sendMessage('get_database_hash', [ true ]);
     if (state === '') {
         kpxcUI.createNotification('error', tr('rememberErrorDatabaseClosed'));
         return;

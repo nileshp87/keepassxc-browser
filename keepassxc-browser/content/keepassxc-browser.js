@@ -97,6 +97,7 @@ function _fs(fieldId) {
 
 
 var kpxcForm = {};
+kpxcForm.passwordInputs = [];
 
 kpxcForm.init = function(form, credentialFields) {
     if (!form.getAttribute('kpxcForm-initialized') && (credentialFields.password || credentialFields.username)) {
@@ -115,7 +116,7 @@ kpxcForm.destroy = function(form, credentialFields) {
     if (form === false && credentialFields) {
         const field = _f(credentialFields.password) || _f(credentialFields.username);
         if (field) {
-            form = field.closest('form');
+            form = kpxc.getForm(field);
         }
     }
 
@@ -127,12 +128,15 @@ kpxcForm.destroy = function(form, credentialFields) {
 kpxcForm.setInputFields = function(form, credentialFields) {
     form.setAttribute('kpxcUsername', credentialFields.username);
     form.setAttribute('kpxcPassword', credentialFields.password);
+
+    // Save all the password input fields from the form
+    kpxcForm.passwordInputs = Array.from(form.elements).filter(e => e.nodeName === 'INPUT' && e.type === 'password');
 };
 
 kpxcForm.onSubmit = async function() {
     const form = this.nodeName === 'FORM' ? this : this.form;
-    const usernameId = this.getAttribute('kpxcUsername');
-    const passwordId = this.getAttribute('kpxcPassword');
+    const usernameId = form.getAttribute('kpxcUsername');
+    const passwordId = form.getAttribute('kpxcPassword');
 
     let usernameValue = '';
     let passwordValue = '';
@@ -143,7 +147,20 @@ kpxcForm.onSubmit = async function() {
     if (usernameField) {
         usernameValue = usernameField.value || usernameField.placeholder;
     }
-    if (passwordField) {
+
+    // Password change form with three elements: Current, New, Repeat New
+    if (kpxcForm.passwordInputs.length === 3) {
+        const current = kpxcForm.passwordInputs[0].value;
+        const newPass = kpxcForm.passwordInputs[1].value;
+        const repeatNew = kpxcForm.passwordInputs[2].value;
+        if (current !== newPass && newPass !== '' && newPass === repeatNew) {
+            passwordValue = newPass;
+        } else if (current === newPass && repeatNew !== newPass) {
+            // Reverse form where current is at the bottom
+            passwordValue = repeatNew;
+        }
+    } else if (passwordField) {
+        // Use the combination password field instead
         passwordValue = passwordField.value;
     }
 
@@ -152,18 +169,10 @@ kpxcForm.onSubmit = async function() {
         return;
     }
 
-    // Check if database is closed
-    const state = await browser.runtime.sendMessage({
-        action: 'get_database_hash',
-        args: [ true ]
+    browser.runtime.sendMessage({
+        action: 'page_set_submitted',
+        args: [ true, usernameValue, passwordValue, trimURL(window.top.location.href) ]
     });
-
-    if (state !== '') {
-        browser.runtime.sendMessage({
-            action: 'page_set_submitted',
-            args: [ true, usernameValue, passwordValue, trimURL(window.top.location.href) ]
-        });
-    }
 };
 
 
@@ -248,7 +257,7 @@ kpxcFields.isSearchField = function(target) {
     }
 
     // Check closest form
-    const closestForm = target.closest('form');
+    const closestForm = kpxc.getForm(target);
     if (closestForm) {
         // Check form action
         const formAction = closestForm.getAttribute('action');
@@ -425,7 +434,7 @@ kpxcFields.getUsernameField = function(passwordId, checkDisabled) {
         return null;
     }
 
-    const form = passwordField.closest('form');
+    const form = kpxc.getForm(passwordField);
     let usernameField = null;
 
     // Search all inputs on this one form
@@ -485,7 +494,7 @@ kpxcFields.getPasswordField = function(usernameId, checkDisabled) {
         return null;
     }
 
-    const form = usernameField.closest('form');
+    const form = kpxc.getForm(usernameField);
     let passwordField = null;
 
     // Search all inputs on this one form
@@ -559,7 +568,7 @@ kpxcFields.prepareCombinations = function(combinations) {
 
         // Initialize form-submit for remembering credentials
         if (field) {
-            const form = field.closest('form');
+            const form = kpxc.getForm(field);
             if (form && form.length > 0) {
                 kpxcForm.init(form, c);
             }
@@ -785,14 +794,6 @@ const initcb = function() {
     }).then(async(response) => {
         kpxc.settings = response;
         kpxc.initCredentialFields();
-
-        browser.runtime.sendMessage({ action: 'page_get_submitted' }).then((credentials) => {
-            if (credentials && credentials.submitted) {
-                browser.runtime.sendMessage({ action: 'page_set_submitted', args: [ false, '', '' ] }).then(() => {
-                    kpxc.rememberCredentials(credentials.username, credentials.password, credentials.url);
-                });
-            }
-        });
     });
 };
 
@@ -944,7 +945,7 @@ kpxc.receiveCredentialsIfNecessary = function() {
     });
 };
 
-kpxc.retrieveCredentialsCallback = function(credentials, dontAutoFillIn) {
+kpxc.retrieveCredentialsCallback = async function(credentials, dontAutoFillIn) {
     if (kpxcFields.combinations.length > 0) {
         kpxc.u = _f(kpxcFields.combinations[0].username);
         kpxc.p = _f(kpxcFields.combinations[0].password);
@@ -954,6 +955,13 @@ kpxc.retrieveCredentialsCallback = function(credentials, dontAutoFillIn) {
         kpxc.credentials = credentials;
         kpxc.prepareFieldsForCredentials(!dontAutoFillIn);
         _called.retrieveCredentials = true;
+    }
+
+    // Retrieve submitted credentials if available
+    const creds = await kpxc.sendMessage('page_get_submitted');
+    if (creds && creds.submitted) {
+        kpxc.sendMessage({ action: 'page_set_submitted', args: [ false, '', '' ] });
+        kpxc.rememberCredentials(creds.username, creds.password, creds.url);
     }
 };
 
@@ -1042,6 +1050,17 @@ kpxc.preparePageForMultipleCredentials = function(credentials) {
     }
 };
 
+// Returns the form that includes the inputField
+kpxc.getForm = function(inputField) {
+    for (const f of document.forms) {
+        for (const e of f.elements) {
+            if (e === inputField) {
+                return f;
+            }
+        }
+    }
+};
+
 kpxc.getFormActionUrl = function(combination) {
     if (!combination) {
         return null;
@@ -1052,7 +1071,7 @@ kpxc.getFormActionUrl = function(combination) {
         return null;
     }
 
-    const form = field.closest('form');
+    const form = kpxc.getForm(field);
     let action = null;
 
     if (form && form.length > 0) {
@@ -1110,9 +1129,9 @@ kpxc.fillInCredentials = function(combination, onlyPassword, suppressWarnings) {
         const fieldId = combination.password || combination.username;
         const field = _f(fieldId);
         if (field) {
-            const form2 = field.closest('form');
-            if (form2 && form2.length > 0) {
-                kpxcForm.init(form2, combination);
+            const form = kpxc.getForm(field);
+            if (form && form.length > 0) {
+                kpxcForm.init(form, combination);
             }
         }
     }

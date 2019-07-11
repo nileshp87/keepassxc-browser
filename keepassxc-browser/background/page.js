@@ -130,6 +130,11 @@ page.clearLogins = function(tabId) {
     page.tabs[tabId].loginList = [];
 };
 
+page.clearSubmitted = function() {
+    page.submitted = false;
+    page.submittedCredentials = {};
+};
+
 page.createTabEntry = function(tabId) {
     page.tabs[tabId] = {
         'stack': [],
