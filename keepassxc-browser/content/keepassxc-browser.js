@@ -1,10 +1,16 @@
 'use strict';
 
+var ManualFill = {
+    NONE: 0,
+    PASS: 1,
+    BOTH: 2
+};
+
 // contains already called method names
 var _called = {};
 _called.retrieveCredentials = false;
 _called.clearLogins = false;
-_called.manualFillRequested = 'none'; // Values: none, pass, both
+_called.manualFillRequested = ManualFill.NONE;
 let _singleInputEnabledForPage = false;
 const _maximumInputs = 100;
 
@@ -45,12 +51,12 @@ browser.runtime.onMessage.addListener(function(req, sender) {
                 }
             }
         } else if (req.action === 'fill_username_password') {
-            _called.manualFillRequested = 'both';
+            _called.manualFillRequested = ManualFill.BOTH;
             kpxc.receiveCredentialsIfNecessary().then((response) => {
                 kpxc.fillInFromActiveElement(false);
             });
         } else if (req.action === 'fill_password') {
-            _called.manualFillRequested = 'pass';
+            _called.manualFillRequested = ManualFill.PASS;
             kpxc.receiveCredentialsIfNecessary().then((response) => {
                 kpxc.fillInFromActiveElement(false, true); // passOnly to true
             });
@@ -851,9 +857,9 @@ kpxc.detectDatabaseChange = function(response) {
 
                 // If user has requested a manual fill through context menu the actual credential filling
                 // is handled here when the opened database has been regognized. It's not a pretty hack.
-                if (_called.manualFillRequested && _called.manualFillRequested !== 'none') {
-                    kpxc.fillInFromActiveElement(false, _called.manualFillRequested === 'pass');
-                    _called.manualFillRequested = 'none';
+                if (_called.manualFillRequested && _called.manualFillRequested !== ManualFill.NONE) {
+                    kpxc.fillInFromActiveElement(false, _called.manualFillRequested === ManualFill.PASS);
+                    _called.manualFillRequested = ManualFill.NONE;
                 }
             });
         }
@@ -947,7 +953,7 @@ kpxc.receiveCredentialsIfNecessary = function() {
                 args: [ kpxc.url, kpxc.submitUrl, false, true ] // Sets triggerUnlock to true
             }).then((credentials) => {
                 // If the database was locked, this is scope never met. In these cases the response is met at kpxc.detectDatabaseChange
-                _called.manualFillRequested = 'none';
+                _called.manualFillRequested = ManualFill.NONE;
                 kpxc.retrieveCredentialsCallback(credentials, false);
                 resolve(credentials);
             });

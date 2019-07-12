@@ -63,7 +63,7 @@ kpxcUsernameField.createIcon = function(target, databaseClosed) {
         }
 
         // Triggers database unlock
-        _called.manualFillRequested = 'both';
+        _called.manualFillRequested = ManualFill.BOTH;
         await browser.runtime.sendMessage({
             action: 'get_database_hash',
             args: [ false, true ] // Set triggerUnlock to true

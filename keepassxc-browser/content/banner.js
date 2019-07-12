@@ -20,7 +20,8 @@ kpxcBanner.destroy = function() {
         action: 'remove_credentials_from_tab_information'
     });
 
-    document.body.removeChild(kpxcBanner.banner);
+    const banner = $('.kpxc-banner');
+    document.body.removeChild(banner || kpxcBanner.banner);
 };
 
 kpxcBanner.create = async function(credentials = {}) {
@@ -57,7 +58,7 @@ kpxcBanner.create = async function(credentials = {}) {
     const icon = kpxcUI.createElement('span', className, { 'alt': 'logo' });
 
     const infoText = kpxcUI.createElement('span', '', {}, tr('rememberInfoText'));
-    const usernameText = kpxcUI.createElement('span', 'small', {}, tr('popupUsername'));
+    const usernameText = kpxcUI.createElement('span', 'small', {}, tr('popupUsername') + ' ');
     const usernameSpan = kpxcUI.createElement('span', 'small info information-username', {}, credentials.username);
 
     const newButton = kpxcUI.createElement('button', 'kpxc-button kpxc-green-button', { 'id': 'kpxc-banner-btn-new' }, tr('popupButtonNew'));

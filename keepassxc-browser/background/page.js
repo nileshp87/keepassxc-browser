@@ -141,6 +141,7 @@ page.createTabEntry = function(tabId) {
         'errorMessage': null,
         'loginList': []
     };
+    page.clearSubmitted();
 };
 
 page.removePageInformationFromNotExistingTabs = function() {

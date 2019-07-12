@@ -84,7 +84,6 @@ httpAuth.loginOrShowCredentials = function(logins, details, resolve, reject) {
                 }
             });
         } else {
-            // TODO: Remove and replace with a dialog
             if (page.settings.showNotifications) {
                 showNotification(tr('multipleCredentialsDetected'));
             }
