@@ -20,8 +20,15 @@ kpxcBanner.destroy = function() {
         action: 'remove_credentials_from_tab_information'
     });
 
-    const banner = $('.kpxc-banner');
-    document.body.removeChild(banner || kpxcBanner.banner);
+    const banners = document.querySelectorAll('.kpxc-banner');
+    if (banners.length > 0) {
+        for (const b of banners) {
+            document.body.removeChild(b);
+        }
+        return;
+    }
+
+    document.body.removeChild(kpxcBanner.banner);
 };
 
 kpxcBanner.create = async function(credentials = {}) {
@@ -32,7 +39,7 @@ kpxcBanner.create = async function(credentials = {}) {
     // Check if database is closed
     const state = await kpxc.sendMessage('get_database_hash', [ true ]);
     if (state === '') {
-        kpxcUI.createNotification('error', tr('rememberErrorDatabaseClosed'));
+        //kpxcUI.createNotification('error', tr('rememberErrorDatabaseClosed'));
         return;
     }
 
@@ -172,7 +179,7 @@ kpxcBanner.saveNewCredentials = function(credentials = {}) {
             for (const child of group.children) {
                 const a = createLink(child.name, child.uuid, child.children.length > 0);
                 a.setAttribute('id', 'child');
-                a.style.paddingLeft = String(padding) + 'px';
+                a.style.paddingLeft = Pixels(padding);
 
                 if (parentElement.getAttribute('id') === 'root') {
                     a.setAttribute('id', 'root-child');
@@ -346,7 +353,7 @@ kpxcBanner.createCredentialDialog = async function() {
     const spanUsernameExists = kpxcUI.createElement('span', '', {}, tr('rememberUsernameExists'));
 
     // Set dialog position
-    dialog.style.top = String(kpxcBanner.banner.offsetHeight) + 'px';
+    dialog.style.top = Pixels(kpxcBanner.banner.offsetHeight);
     dialog.style.right = '0';
 
     databaseText.appendChild(spanDatabaseText);
@@ -371,7 +378,7 @@ kpxcBanner.createGroupDialog = function() {
     const list = kpxcUI.createElement('ul', 'list-group', { 'id': 'list' });
 
     // Set dialog position
-    dialog.style.top = String(kpxcBanner.banner.offsetHeight) + 'px';
+    dialog.style.top = Pixels(kpxcBanner.banner.offsetHeight);
     dialog.style.right = '0';
 
     dialog.appendMultiple(chooseGroup, list);

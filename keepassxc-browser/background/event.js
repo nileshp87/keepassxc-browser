@@ -203,7 +203,7 @@ kpxcEvent.onUpdateAvailableKeePassXC = function(callback, tab) {
 kpxcEvent.onRemoveCredentialsFromTabInformation = function(callback, tab) {
     const id = tab.id || page.currentTabId;
     page.clearCredentials(id);
-    page.clearSubmitted();
+    page.clearSubmittedCredentials();
 };
 
 kpxcEvent.onLoginPopup = function(callback, tab, logins) {
@@ -256,17 +256,20 @@ kpxcEvent.pageGetLoginId = function(callback, tab) {
 
 kpxcEvent.pageSetLoginId = function(callback, tab, loginId) {
     page.loginId = loginId;
+    callback();
 };
+
+kpxcEvent.pageClearSubmitted = function(callback, tab) {
+    page.clearSubmittedCredentials();
+    callback();
+}
 
 kpxcEvent.pageGetSubmitted = function(callback, tab) {
     callback(page.submittedCredentials);
 };
 
-kpxcEvent.pageSetSubmitted = function(callback, tab, submitted, username, password, url) {
-    page.submittedCredentials.submitted = submitted;
-    page.submittedCredentials.username = username;
-    page.submittedCredentials.password = password;
-    page.submittedCredentials.url = url;
+kpxcEvent.pageSetSubmitted = function(callback, tab, submitted, username, password, url, oldCredentials) {
+    page.setSubmittedCredentials(submitted, username, password, url, oldCredentials);
     callback();
 };
 
@@ -290,9 +293,10 @@ kpxcEvent.messageHandlers = {
     'load_settings': kpxcEvent.onLoadSettings,
     'lock-database': kpxcEvent.lockDatabase,
     'page_clear_logins': kpxcEvent.pageClearLogins,
+    'page_clear_submitted': kpxcEvent.pageClearSubmitted,
     'page_get_login_id': kpxcEvent.pageGetLoginId,
-    'page_set_login_id': kpxcEvent.pageSetLoginId,
     'page_get_submitted': kpxcEvent.pageGetSubmitted,
+    'page_set_login_id': kpxcEvent.pageSetLoginId,
     'page_set_submitted': kpxcEvent.pageSetSubmitted,
     'pop_stack': kpxcEvent.onPopStack,
     'popup_login': kpxcEvent.onLoginPopup,

@@ -54,7 +54,7 @@ kpxcPassword.initField = function(field, inputs, pos) {
     let found = false;
     if (inputs) {
         for (let i = pos + 1; i < inputs.length; i++) {
-            if (inputs[i] && inputs[i].getAttribute('type') && inputs[i].getAttribute('type').toLowerCase() === 'password') {
+            if (inputs[i] && inputs[i].getLowerCaseAttribute('type') === 'password') {
                 field.setAttribute('kpxc-pwgen-next-field-id', inputs[i].getAttribute('data-kpxc-id'));
                 field.setAttribute('kpxc-pwgen-next-is-password-field', (i === 0));
                 found = true;
@@ -81,8 +81,8 @@ kpxcPassword.createIcon = function(field) {
             'kpxc-pwgen-field-id': field.getAttribute('data-kpxc-id')
         });
     icon.style.zIndex = '9999';
-    icon.style.width = String(size) + 'px';
-    icon.style.height = String(size) + 'px';
+    icon.style.width = Pixels(size);
+    icon.style.height = Pixels(size);
 
     icon.addEventListener('click', function(e) {
         e.preventDefault();
@@ -159,12 +159,12 @@ kpxcPassword.createDialog = function() {
 
     const icon = $('.kpxc-pwgen-icon');
     if (icon) {
-        dialog.style.top = String(icon.offsetTop + icon.offsetHeight) + 'px';
+        dialog.style.top = Pixels(icon.offsetTop + icon.offsetHeight);
         dialog.style.left = icon.style.left;
     } else {
         const rect = document.activeElement.getBoundingClientRect();
-        dialog.style.top = String(rect.top + rect.height) + 'px';
-        dialog.style.left = rect.left + 'px';
+        dialog.style.top = Pixels(rect.top + rect.height);
+        dialog.style.left = Pixels(rect.left);
     }
 
     document.body.append(wrapper);
@@ -212,12 +212,12 @@ kpxcPassword.showDialog = function(field, icon) {
     // Adjust the dialog location
     if (kpxcPassword.dialog) {
         if (icon) {
-            kpxcPassword.dialog.style.top = String(icon.offsetTop + icon.offsetHeight) + 'px';
+            kpxcPassword.dialog.style.top = Pixels(icon.offsetTop + icon.offsetHeight);
             kpxcPassword.dialog.style.left = icon.style.left;
         } else {
             const rect = document.activeElement.getBoundingClientRect();
-            kpxcPassword.dialog.style.top = String(rect.top + rect.height) + 'px';
-            kpxcPassword.dialog.style.left = rect.left + 'px';
+            kpxcPassword.dialog.style.top = Pixels(rect.top + rect.height);
+            kpxcPassword.dialog.style.left = Pixels(rect.left);
         }
 
         kpxcPassword.dialog.setAttribute('kpxc-pwgen-field-id', field.getAttribute('data-kpxc-id'));
@@ -244,7 +244,7 @@ kpxcPassword.generate = function(e) {
 
     browser.runtime.sendMessage({
         action: 'generate_password'
-    }).then(kpxcPassword.callbackGeneratedPassword).catch((err) => {
+    }).then(callbackGeneratedPassword).catch((err) => {
         console.log(err);
     });
 };
@@ -252,8 +252,8 @@ kpxcPassword.generate = function(e) {
 kpxcPassword.copy = function(e) {
     e.preventDefault();
     if (kpxcPassword.copyPasswordToClipboard()) {
-        kpxcPassword.greenButton('#kpxc-pwgen-btn-copy');
-        kpxcPassword.whiteButton('#kpxc-pwgen-btn-fill');
+        greenButton('#kpxc-pwgen-btn-copy');
+        whiteButton('#kpxc-pwgen-btn-fill');
     }
 };
 
@@ -289,8 +289,8 @@ kpxcPassword.fill = function(e) {
         }
 
         if (kpxcPassword.copyPasswordToClipboard()) {
-            kpxcPassword.greenButton('#kpxc-pwgen-btn-fill');
-            kpxcPassword.whiteButton('#kpxc-pwgen-btn-copy');
+            greenButton('#kpxc-pwgen-btn-fill');
+            whiteButton('#kpxc-pwgen-btn-copy');
         }
     }
 };
@@ -305,11 +305,11 @@ kpxcPassword.copyPasswordToClipboard = function() {
     return false;
 };
 
-kpxcPassword.callbackGeneratedPassword = function(entries) {
+const callbackGeneratedPassword = function(entries) {
     if (entries && entries.length >= 1) {
         const errorMessage = $('#kpxc-pwgen-error');
         if (errorMessage) {
-            kpxcPassword.enableButtons();
+            enableButtons();
 
             $('.kpxc-pwgen-checkbox').parentElement.style.display = 'block';
             $('.kpxc-pwgen-bits').style.display = 'block';
@@ -319,8 +319,8 @@ kpxcPassword.callbackGeneratedPassword = function(entries) {
             errorMessage.remove();
         }
 
-        kpxcPassword.whiteButton('#kpxc-pwgen-btn-fill');
-        kpxcPassword.whiteButton('#kpxc-pwgen-btn-copy');
+        whiteButton('#kpxc-pwgen-btn-fill');
+        whiteButton('#kpxc-pwgen-btn-copy');
         $('.kpxc-pwgen-input').value = entries[0].password;
         if (entries[0].entropy) {
             $('.kpxc-pwgen-bits').textContent = tr('passwordGeneratorBits', (Number.isNaN(entries[0].entropy) ? '???' : String(entries[0].entropy.toFixed(2))));
@@ -340,34 +340,28 @@ kpxcPassword.callbackGeneratedPassword = function(entries) {
             errorMessage.style.whiteSpace = 'pre';
             input.parentElement.append(errorMessage);
 
-            kpxcPassword.disableButtons();
+            disableButtons();
         }
     }
 };
 
-kpxcPassword.onRequestPassword = function() {
-    browser.runtime.sendMessage({
-        action: 'generate_password'
-    }).then(kpxcPassword.callbackGeneratedPassword);
-};
-
-kpxcPassword.greenButton = function(button) {
+const greenButton = function(button) {
     $(button).classList.remove('kpxc-white-button');
     $(button).classList.add('kpxc-green-button');
 };
 
-kpxcPassword.whiteButton = function(button) {
+const whiteButton = function(button) {
     $(button).classList.remove('kpxc-green-button');
     $(button).classList.add('kpxc-white-button');
 };
 
-kpxcPassword.enableButtons = function() {
+const enableButtons = function() {
     $('#kpxc-pwgen-btn-generate').textContent = tr('passwordGeneratorGenerate');
     $('#kpxc-pwgen-btn-copy').style.display = 'inline-block';
     $('#kpxc-pwgen-btn-fill').style.display = 'inline-block';
 };
 
-kpxcPassword.disableButtons = function() {
+const disableButtons = function() {
     $('#kpxc-pwgen-btn-generate').textContent = tr('passwordGeneratorTryAgain');
     $('#kpxc-pwgen-btn-copy').style.display = 'none';
     $('#kpxc-pwgen-btn-fill').style.display = 'none';

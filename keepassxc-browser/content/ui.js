@@ -5,6 +5,11 @@ var $ = function(elem) {
     return document.querySelector(elem);
 };
 
+// Returns a string with 'px' for CSS styles
+var Pixels = function(value) {
+    return String(value) + 'px';
+};
+
 var kpxcUI = {};
 
 // Wrapper for creating elements
@@ -42,8 +47,8 @@ kpxcUI.setIconPosition = function(icon, field) {
     const offset = Number(icon.getAttribute('offset'));
     const size = Number(icon.getAttribute('size'));
 
-    icon.style.top = String((rect.top + document.scrollingElement.scrollTop) + offset + 1) + 'px';
-    icon.style.left = String((rect.left + document.scrollingElement.scrollLeft) + field.offsetWidth - size - offset) + 'px';
+    icon.style.top = Pixels((rect.top + document.scrollingElement.scrollTop) + offset + 1);
+    icon.style.left = Pixels((rect.left + document.scrollingElement.scrollLeft) + field.offsetWidth - size - offset);
 };
 
 /**
@@ -115,8 +120,8 @@ document.addEventListener('mousemove', function(e) {
         const yPos = e.clientY - kpxcPassword.diffY;
 
         if (kpxcPassword.selected !== null) {
-            kpxcPassword.dialog.style.left = xPos + 'px';
-            kpxcPassword.dialog.style.top = yPos + 'px';
+            kpxcPassword.dialog.style.left = Pixels(xPos);
+            kpxcPassword.dialog.style.top = Pixels(yPos);
         }
     }
 
@@ -125,8 +130,8 @@ document.addEventListener('mousemove', function(e) {
         const yPos = e.clientY - kpxcDefine.diffY;
 
         if (kpxcDefine.selected !== null) {
-            kpxcDefine.dialog.style.left = xPos + 'px';
-            kpxcDefine.dialog.style.top = yPos + 'px';
+            kpxcDefine.dialog.style.left = Pixels(xPos);
+            kpxcDefine.dialog.style.top = Pixels(yPos);
         }
     }
 });
@@ -140,4 +145,8 @@ HTMLDivElement.prototype.appendMultiple = function(...args) {
     for (const a of args) {
         this.append(a);
     }
+};
+
+Element.prototype.getLowerCaseAttribute = function(attr) {
+    return this.getAttribute(attr) ? this.getAttribute(attr).toLowerCase() : undefined;
 };

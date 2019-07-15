@@ -204,9 +204,9 @@ kpxcAutocomplete.updatePosition = function(inputField, elem) {
     }
 
     const rect = inputField.getBoundingClientRect();
-    div.style.top = String((rect.top + document.scrollingElement.scrollTop) + inputField.offsetHeight) + 'px';
-    div.style.left = String((rect.left + document.scrollingElement.scrollLeft)) + 'px';
-    div.style.minWidth = String(inputField.offsetWidth) + 'px';
+    div.style.top = Pixels((rect.top + document.scrollingElement.scrollTop) + inputField.offsetHeight);
+    div.style.left = Pixels((rect.left + document.scrollingElement.scrollLeft));
+    div.style.minWidth = Pixels(inputField.offsetWidth);
 };
 
 // Detect click outside autocomplete

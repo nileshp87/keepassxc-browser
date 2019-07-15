@@ -189,10 +189,10 @@ kpxcDefine.markFields = function(chooser, pattern) {
         if (kpxcFields.isVisible(i)) {
             const field = kpxcUI.createElement('div', 'kpxcDefine-fixed-field', { 'data-kpxc-id': i.getAttribute('data-kpxc-id') });
             const rect = i.getBoundingClientRect();
-            field.style.top = rect.top + 'px';
-            field.style.left = rect.left + 'px';
-            field.style.width = rect.width + 'px';
-            field.style.height = rect.height + 'px';
+            field.style.top = Pixels(rect.top);
+            field.style.left = Pixels(rect.left);
+            field.style.width = Pixels(rect.width);
+            field.style.height = Pixels(rect.height);
             field.textContent = String(index);
             field.addEventListener('click', function(e) {
                 kpxcDefine.eventFieldClick(e);

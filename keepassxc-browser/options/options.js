@@ -446,8 +446,8 @@ options.createWarning = function(elem, text) {
     const banner = document.createElement('div');
     banner.classList.add('alert', 'alert-dismissible', 'alert-danger', 'fade', 'in');
     banner.style.position = 'absolute';
-    banner.style.left = String(elem.offsetLeft) + 'px';
-    banner.style.top = String(elem.offsetTop + elem.offsetHeight) + 'px';
+    banner.style.left = Pixels(elem.offsetLeft)';
+    banner.style.top = Pixels(elem.offsetTop + elem.offsetHeight);
     banner.style.padding = '0px';
     banner.style.width = '300px';
     banner.textContent = text;

@@ -144,19 +144,20 @@ kpxcForm.onSubmit = async function() {
     const form = this.nodeName === 'FORM' ? this : this.form;
     const usernameId = form.getAttribute('kpxcUsername');
     const passwordId = form.getAttribute('kpxcPassword');
-
+    const usernameField = _f(usernameId);
+    const passwordField = _f(passwordId);
     let usernameValue = '';
     let passwordValue = '';
 
-    const usernameField = _f(usernameId);
-    const passwordField = _f(passwordId);
-
     if (usernameField) {
         usernameValue = usernameField.value || usernameField.placeholder;
+    } else if (kpxc.credentials.length === 1) {
+        // Single entry found for the page, use the username of it instead of an empty one
+        usernameValue = kpxc.credentials[0].login;
     }
 
     // Check if the form has three password fields -> a possible password change form
-    if (kpxcForm.passwordInputs.length === 3) {
+    if (kpxcForm.passwordInputs.length >= 2) {
         passwordValue = kpxcForm.getNewPassword();
     } else if (passwordField) {
         // Use the combination password field instead
@@ -170,19 +171,26 @@ kpxcForm.onSubmit = async function() {
 
     browser.runtime.sendMessage({
         action: 'page_set_submitted',
-        args: [ true, usernameValue, passwordValue, trimURL(window.top.location.href) ]
+        args: [ true, usernameValue, passwordValue, trimURL(window.top.location.href), kpxc.credentials ]
     });
 };
 
 // Retrieve new password from a form with three elements: Current, New, Repeat New
 kpxcForm.getNewPassword = function() {
-    if (kpxcForm.passwordInputs.length < 3) {
+    if (kpxcForm.passwordInputs.length < 2) {
         return '';
     }
 
-    const current = kpxcForm.passwordInputs[0].value;
-    const newPass = kpxcForm.passwordInputs[1].value;
-    const repeatNew = kpxcForm.passwordInputs[2].value;
+    // Just two password fields, current and new
+    if (kpxcForm.passwordInputs.length === 2 &&
+        kpxcForm.passwordInputs[0] !== kpxcForm.passwordInputs[1]) {
+        return kpxcForm.passwordInputs[1].value;
+    }
+
+    // Choose the last three password fields. The first ones are almost always for something else
+    const current = kpxcForm.passwordInputs[kpxcForm.passwordInputs.length - 3].value;
+    const newPass = kpxcForm.passwordInputs[kpxcForm.passwordInputs.length - 2].value;
+    const repeatNew = kpxcForm.passwordInputs[kpxcForm.passwordInputs.length - 1].value;
 
     if (current !== newPass && newPass !== '' && newPass === repeatNew) {
         return newPass;
@@ -193,6 +201,7 @@ kpxcForm.getNewPassword = function() {
 
     return '';
 };
+
 
 var kpxcFields = {};
 
@@ -242,26 +251,6 @@ kpxcFields.prepareId = function(id) {
     return (id + '').replace(kpxcFields.rcssescape, kpxcFields.fcssescape);
 };
 
-/**
- * Returns the first parent element satifying the {@code predicate} mapped by {@code resultFn} or else {@code defaultVal}.
- * @param {HTMLElement} element     The start element (excluded, starting with the parents)
- * @param {function} predicate      Matcher for the element to find, type (HTMLElement) => boolean
- * @param {function} resultFn       Callback function of type (HTMLElement) => {*} called for the first matching element
- * @param {fun} defaultValFn        Fallback return value supplier, if no element matching the predicate can be found
- */
-kpxcFields.traverseParents = function(element, predicate, resultFn = () => true, defaultValFn = () => false) {
-    for (let f = element.parentElement; f !== null; f = f.parentElement) {
-        if (predicate(f)) {
-            return resultFn(f);
-        }
-    }
-    return defaultValFn();
-};
-
-kpxcFields.getOverflowHidden = function(field) {
-    return kpxcFields.traverseParents(field, f => f.style.overflow === 'hidden');
-};
-
 // Checks if input field is a search field. Attributes or form action containing 'search', or parent element holding
 // role="search" will be identified as a search field.
 kpxcFields.isSearchField = function(target) {
@@ -293,10 +282,8 @@ kpxcFields.isSearchField = function(target) {
         }
     }
 
-    // Check parent elements for role="search"
-    const roleFunc = f => f.getAttribute('role');
-    const roleValue = kpxcFields.traverseParents(target, roleFunc, roleFunc, () => null);
-    if (roleValue && roleValue === 'search') {
+    // Check parent elements for role='search'
+    if (target.closest('[role~=\'search\']')) {
         return true;
     }
 
@@ -349,7 +336,7 @@ kpxcFields.getAllCombinations = function(inputs) {
 
     for (const i of inputs) {
         if (i) {
-            if (i.getAttribute('type') && i.getAttribute('type').toLowerCase() === 'password') {
+            if (i.getLowerCaseAttribute('type') === 'password') {
                 const uId = (!uField || uField.length < 1) ? null : uField.getAttribute('data-kpxc-id');
 
                 const combination = {
@@ -464,7 +451,7 @@ kpxcFields.getUsernameField = function(passwordId, checkDisabled) {
                 return false; // Break
             }
 
-            if (i.getAttribute('type') && i.getAttribute('type').toLowerCase() === 'password') {
+            if (i.getLowerCaseAttribute('type') === 'password') {
                 return true; // Continue
             }
 
@@ -480,7 +467,7 @@ kpxcFields.getUsernameField = function(passwordId, checkDisabled) {
                 break;
             }
 
-            if (i.getAttribute('type') && i.getAttribute('type').toLowerCase() === 'password') {
+            if (i.getLowerCaseAttribute('type') === 'password') {
                 continue;
             }
 
@@ -537,7 +524,7 @@ kpxcFields.getPasswordField = function(usernameId, checkDisabled) {
             if (i.getAttribute('data-kpxc-id') === usernameId) {
                 active = true;
             }
-            if (active && i.getAttribute('type') && i.getAttribute('type').toLowerCase() === 'password') {
+            if (active && i.getLowerCaseAttribute('type') === 'password') {
                 passwordField = i;
                 break;
             }
@@ -812,6 +799,18 @@ const initcb = function() {
     }).then(async(response) => {
         kpxc.settings = response;
         kpxc.initCredentialFields();
+
+        // Retrieve submitted credentials if available.
+        const creds = await kpxc.sendMessage('page_get_submitted');
+        if (creds && creds.submitted) {
+            // If username field is not set, wait for credentials in kpxc.retrieveCredentialsCallback.
+            if (!creds.username) {
+                return;
+            }
+
+            kpxc.sendMessage('page_clear_submitted');
+            kpxc.rememberCredentials(creds.username, creds.password, creds.url, creds.oldCredentials);
+        }
     });
 };
 
@@ -939,7 +938,7 @@ kpxc.initPasswordGenerator = function(inputs) {
     kpxcPassword.init(kpxc.settings.usePasswordGeneratorIcons);
 
     for (let i = 0; i < inputs.length; i++) {
-        if (inputs[i] && inputs[i].getAttribute('type') && inputs[i].getAttribute('type').toLowerCase() === 'password') {
+        if (inputs[i] && inputs[i].getLowerCaseAttribute('type') === 'password') {
             kpxcPassword.initField(inputs[i], inputs, i);
         }
     }
@@ -978,8 +977,8 @@ kpxc.retrieveCredentialsCallback = async function(credentials, dontAutoFillIn) {
     // Retrieve submitted credentials if available
     const creds = await kpxc.sendMessage('page_get_submitted');
     if (creds && creds.submitted) {
-        kpxc.sendMessage({ action: 'page_set_submitted', args: [ false, '', '' ] });
-        kpxc.rememberCredentials(creds.username, creds.password, creds.url);
+        kpxc.sendMessage('page_clear_submitted');
+        kpxc.rememberCredentials(creds.username, creds.password, creds.url, creds.oldCredentials);
     }
 };
 
@@ -1483,7 +1482,16 @@ kpxc.contextMenuRememberCredentials = function() {
     }
 };
 
-kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue) {
+/**
+ * Gets the credential list and shows the update banner
+ * @param {string} usernameValue    Submitted username
+ * @param {string} passwordValue    Submitted password
+ * @param {string} urlValue         URL of the page where password change was detected
+ * @param {Array} oldCredentials    Credentials saved from the password change page, if available
+ */
+kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue, oldCredentials) {
+    const credentials = kpxc.credentials || oldCredentials;
+
     // No password given or field cleaned by a site-running script
     // --> no password to save
     if (passwordValue === '') {
@@ -1493,7 +1501,7 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
     let usernameExists = false;
     let nothingChanged = false;
 
-    for (const c of kpxc.credentials) {
+    for (const c of credentials) {
         if (c.login === usernameValue && c.password === passwordValue) {
             nothingChanged = true;
             break;
@@ -1506,7 +1514,7 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
 
     if (!nothingChanged) {
         if (!usernameExists) {
-            for (const c of kpxc.credentials) {
+            for (const c of credentials) {
                 if (c.login === usernameValue) {
                     usernameExists = true;
                     break;
@@ -1514,7 +1522,7 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
             }
         }
         const credentialsList = [];
-        for (const c of kpxc.credentials) {
+        for (const c of credentials) {
             credentialsList.push({
                 login: c.login,
                 name: c.name,
@@ -1548,7 +1556,7 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
         }
 
         // Show the banner
-        const credentials = {
+        const newCredentials = {
             username: usernameValue,
             password: passwordValue,
             url: urlValue,
@@ -1556,7 +1564,7 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
             list: credentialsList
         };
 
-        kpxcBanner.create(credentials);
+        kpxcBanner.create(newCredentials);
         return true;
     }
 

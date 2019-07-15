@@ -130,7 +130,15 @@ page.clearLogins = function(tabId) {
     page.tabs[tabId].loginList = [];
 };
 
-page.clearSubmitted = function() {
+page.setSubmittedCredentials = function(submitted, username, password, url, oldCredentials) {
+    page.submittedCredentials.submitted = submitted;
+    page.submittedCredentials.username = username;
+    page.submittedCredentials.password = password;
+    page.submittedCredentials.url = url;
+    page.submittedCredentials.oldCredentials = oldCredentials;
+};
+
+page.clearSubmittedCredentials = function() {
     page.submitted = false;
     page.submittedCredentials = {};
 };
@@ -141,7 +149,7 @@ page.createTabEntry = function(tabId) {
         'errorMessage': null,
         'loginList': []
     };
-    page.clearSubmitted();
+    page.clearSubmittedCredentials();
 };
 
 page.removePageInformationFromNotExistingTabs = function() {
