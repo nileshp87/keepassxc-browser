@@ -1,15 +1,17 @@
 'use strict';
 
-keepass.migrateKeyRing().then(() => {
-    page.initSettings().then(() => {
-        page.initOpenedTabs().then(() => {
-            httpAuth.init();
-            keepass.reconnect().then(() => {
-                keepass.enableAutomaticReconnect();
-            });
-        });
-    });
-});
+(async () => {
+    try {
+        await keepass.migrateKeyRing();
+        await page.initSettings();
+        await page.initOpenedTabs();
+        await httpAuth.init();
+        await keepass.reconnect();
+        await keepass.enableAutomaticReconnect();
+    } catch (e) {
+        console.log('init.js failed');
+    }
+})();
 
 /**
  * Generate information structure for created tab and invoke all needed
@@ -20,7 +22,10 @@ browser.tabs.onCreated.addListener((tab) => {
     if (tab.id > 0) {
         if (tab.selected) {
             page.currentTabId = tab.id;
-            kpxcEvent.invoke(page.switchTab, null, tab.id, []);
+            if (!page.tabs[tab.id]) {
+                page.createTabEntry(tab.id);
+            }
+            page.switchTab(tab);
         }
     }
 });
@@ -42,18 +47,24 @@ browser.tabs.onRemoved.addListener((tabId, removeInfo) => {
  * Invoke functions to retrieve credentials for focused tab
  * @param {object} activeInfo
  */
-browser.tabs.onActivated.addListener((activeInfo) => {
+browser.tabs.onActivated.addListener(async function(activeInfo) {
     // Remove possible credentials from old tab information
     page.clearCredentials(page.currentTabId, true);
 
-    browser.tabs.get(activeInfo.tabId).then((info) => {
+    try {
+        const info = await browser.tabs.get(activeInfo.tabId);
         if (info && info.id) {
             page.currentTabId = info.id;
             if (info.status === 'complete') {
-                kpxcEvent.invoke(page.switchTab, null, info.id, []);
+                if (!page.tabs[info.id]) {
+                    page.createTabEntry(info.id);
+                }
+                page.switchTab(info);
             }
         }
-    });
+    } catch (err) {
+        console.log('Error: ' + err);
+    }
 });
 
 /**
@@ -68,7 +79,10 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 
     if (changeInfo.status === 'complete') {
-        browserAction.showDefault(null, tab);
+        browserAction.showDefault(tab);
+        if (!page.tabs[tab.id]) {
+            page.createTabEntry(tab.id); // Needed?
+        }
     }
 });
 
@@ -104,12 +118,11 @@ for (const item of contextMenuItems) {
 }
 
 // Listen for keyboard shortcuts specified by user
-browser.commands.onCommand.addListener((command) => {
+browser.commands.onCommand.addListener(async (command) => {
     if (contextMenuItems.some(e => e.action === command)) {
-        browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-            if (tabs.length) {
-                browser.tabs.sendMessage(tabs[0].id, { action: command });
-            }
-        });
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        if (tabs.length) {
+            browser.tabs.sendMessage(tabs[0].id, { action: command });
+        }
     }
 });

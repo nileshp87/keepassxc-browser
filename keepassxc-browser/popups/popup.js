@@ -33,54 +33,55 @@ function statusResponse(r) {
     }
 }
 
-$(function() {
-    $('#connect-button').click(function() {
-        browser.runtime.sendMessage({
+$(async () => {
+    $('#connect-button').click(async () => {
+        await browser.runtime.sendMessage({
             action: 'associate'
         });
         close();
     });
 
-    $('#reconnect-button').click(function() {
-        browser.runtime.sendMessage({
-            action: 'associate'
+    $('#reconnect-button').click(async () => {
+        await browser.runtime.sendMessage({ 
+            ction: 'associate'
         });
         close();
     });
 
-    $('#reload-status-button').click(function() {
-        browser.runtime.sendMessage({
+    $('#reload-status-button').click(async () => {
+        statusResponse(await browser.runtime.sendMessage({
             action: 'reconnect'
-        }).then(statusResponse);
+        }));
     });
 
-    $('#reopen-database-button').click(function() {
-        browser.runtime.sendMessage({
+    $('#reopen-database-button').click(async () => {
+        statusResponse(await browser.runtime.sendMessage({
             action: 'get_status',
             args: [ false, true ] // Set forcePopup to true
-        }).then(statusResponse);
+        }));
     });
 
-    $('#redetect-fields-button').click(function() {
-        browser.tabs.query({ 'active': true, 'currentWindow': true }).then(function(tabs) {
-            if (tabs.length === 0) {
-                return; // For example: only the background devtools or a popup are opened
-            }
-            const tab = tabs[0];
+    $('#redetect-fields-button').click(async () => {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        if (tabs.length === 0) {
+            return; // Only the background devtools or a popup are opened
+        }
+        const tab = tabs[0];
 
-            browser.tabs.sendMessage(tab.id, {
-                action: 'redetect_fields'
-            });
+        browser.tabs.sendMessage(tab.id, {
+            action: 'redetect_fields'
         });
     });
 
-    $('#lock-database-button').click(function() {
-        browser.runtime.sendMessage({
+    $('#lock-database-button').click(async () => {
+        statusResponse(await browser.runtime.sendMessage({
             action: 'lock-database'
-        }).then(statusResponse);
+        }));
     });
 
-    browser.runtime.sendMessage({
+    statusResponse(await browser.runtime.sendMessage({
         action: 'get_status'
-    }).then(statusResponse);
+    }).catch((err) => {
+        console.log('Error: Could not get status: ' + err);
+    }));
 });

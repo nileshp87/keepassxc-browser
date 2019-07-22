@@ -2,91 +2,26 @@
 
 const kpxcEvent = {};
 
-kpxcEvent.onMessage = function(request, sender, callback) {
+kpxcEvent.onMessage = async function(request, sender) {
     if (request.action in kpxcEvent.messageHandlers) {
-        //console.log('onMessage(' + request.action + ') for #' + sender.tab.id);
         if (!sender.hasOwnProperty('tab') || sender.tab.id < 1) {
             sender.tab = {};
             sender.tab.id = page.currentTabId;
         }
 
-        kpxcEvent.invoke(kpxcEvent.messageHandlers[request.action], callback, sender.tab.id, request.args);
-
-        // onMessage closes channel for callback automatically
-        // if this method does not return true
-        if (callback !== undefined) {
-            return true;
-        }
+        return await kpxcEvent.messageHandlers[request.action](sender.tab, request.args);
     }
 };
 
-/**
- * Get interesting information about the given tab.
- * Function adapted from AdBlock-Plus.
- *
- * @param {function} handler to call after invoke
- * @param {function} callback to call after handler or null
- * @param {integer} senderTabId
- * @param {array} args
- * @param {bool} secondTime
- * @returns null (asynchronous)
- */
-kpxcEvent.invoke = function(handler, callback, senderTabId, args, secondTime) {
-    if (senderTabId < 1) {
-        return;
-    }
-
-    if (!page.tabs[senderTabId]) {
-        page.createTabEntry(senderTabId);
-    }
-
-    // Remove information from no longer existing tabs
-    page.removePageInformationFromNotExistingTabs();
-
-    browser.tabs.get(senderTabId).then((tab) => {
-        if (!tab) {
-            return;
-        }
-
-        if (!tab.url) {
-            // Issue 6877: tab URL is not set directly after you opened a window
-            // using window.open()
-            if (!secondTime) {
-                window.setTimeout(function() {
-                    kpxcEvent.invoke(handler, callback, senderTabId, args, true);
-                }, 250);
-            }
-            return;
-        }
-
-        if (!page.tabs[tab.id]) {
-            page.createTabEntry(tab.id);
-        }
-
-        args = args || [];
-
-        args.unshift(tab);
-        args.unshift(callback);
-
-        if (handler) {
-            handler.apply(this, args);
-        } else {
-            console.log('undefined handler for tab ' + tab.id);
-        }
-    }).catch((e) => {
-        console.log(e);
-    });
-};
-
-kpxcEvent.showStatus = function(configured, tab, callback) {
+kpxcEvent.showStatus = async function(tab, configured) {
     let keyId = null;
     if (configured && keepass.databaseHash !== '') {
         keyId = keepass.keyRing[keepass.databaseHash].id;
     }
 
-    browserAction.showDefault(null, tab);
+    browserAction.showDefault(tab);
     const errorMessage = page.tabs[tab.id].errorMessage;
-    callback({
+    return {
         identifier: keyId,
         configured: configured,
         databaseClosed: keepass.isDatabaseClosed,
@@ -94,183 +29,202 @@ kpxcEvent.showStatus = function(configured, tab, callback) {
         encryptionKeyUnrecognized: keepass.isEncryptionKeyUnrecognized,
         associated: keepass.isAssociated(),
         error: errorMessage || null
+    };
+};
+
+kpxcEvent.onLoadSettings = async function() {
+    return await page.initSettings().catch((err) => {
+        console.log('onLoadSettings error: ' + err);
+        return Promise.reject();
     });
 };
 
-kpxcEvent.onLoadSettings = function(callback, tab) {
-    page.initSettings().then((settings) => {
-        callback(settings);
-    }, (err) => {
-        console.log('error loading settings: ' + err);
+kpxcEvent.onLoadKeyRing = async function() {
+    const item = await browser.storage.local.get({ 'keyRing': {} }).catch((err) => {
+        console.log('kpxcEvent.onLoadKeyRing error: ' + err);
+        return Promise.reject();
     });
+
+    keepass.keyRing = item.keyRing;
+    if (keepass.isAssociated() && !keepass.keyRing[keepass.associated.hash]) {
+        keepass.associated = {
+            'value': false,
+            'hash': null
+        };
+    }
+
+    return item.keyRing;
 };
 
-kpxcEvent.onLoadKeyRing = function(callback, tab) {
-    browser.storage.local.get({ 'keyRing': {} }).then(function(item) {
-        keepass.keyRing = item.keyRing;
-        if (keepass.isAssociated() && !keepass.keyRing[keepass.associated.hash]) {
-            keepass.associated = {
-                'value': false,
-                'hash': null
-            };
-        }
-        callback(item.keyRing);
-    }, (err) => {
-        console.log('error loading keyRing: ' + err);
-    });
+kpxcEvent.onSaveSettings = async function(tab, args = []) {
+    const [ settings ] = args;
+    browser.storage.local.set({ 'settings': settings });
+    kpxcEvent.onLoadSettings(tab);
+    return Promise.resolve();
 };
 
-kpxcEvent.onSaveSettings = function(callback, tab, settings) {
-    browser.storage.local.set({ 'settings': settings }).then(function() {
-        kpxcEvent.onLoadSettings(callback, tab);
-    });
-};
-
-kpxcEvent.onGetStatus = function(callback, tab, internalPoll = false, triggerUnlock = false) {
+kpxcEvent.onGetStatus = async function(tab, args = []) {
     // When internalPoll is true the event is triggered from content script in intervals -> don't poll KeePassXC
-    if (!internalPoll) {
-        keepass.testAssociation((response) => {
+    try {
+        const [ internalPoll = false, triggerUnlock = false ] = args;
+        if (!internalPoll) {
+            const response = await keepass.testAssociation(tab, [ true, triggerUnlock ]);
             if (!response) {
-                kpxcEvent.showStatus(false, tab, callback);
-                return;
+                return kpxcEvent.showStatus(tab, false);
             }
+        }
 
-            keepass.isConfigured().then((configured) => {
-                kpxcEvent.showStatus(configured, tab, callback);
-            });
-        }, tab, true, triggerUnlock);
-    } else {
-        keepass.isConfigured().then((configured) => {
-            kpxcEvent.showStatus(configured, tab, callback);
-        });
+        const configured = await keepass.isConfigured();
+        return kpxcEvent.showStatus(tab, configured);
+    } catch (err) {
+        console.log('Error: No status shown: ' + err);
+        return Promise.reject();
     }
 };
 
-kpxcEvent.onReconnect = async function(callback, tab) {
-    const configured = await keepass.reconnect(callback, tab);
+kpxcEvent.onReconnect = async function(tab) {
+    const configured = await keepass.reconnect(tab);
     if (configured) {
         browser.tabs.sendMessage(tab.id, {
             action: 'redetect_fields'
         }).catch((err) => {
             console.log(err);
+            return;
         });
     }
-    kpxcEvent.showStatus(configured, tab, callback);
+
+    kpxcEvent.showStatus(configured, tab);
 };
 
-kpxcEvent.lockDatabase = function(callback, tab) {
-    keepass.lockDatabase(tab).then((response) => {
-        kpxcEvent.showStatus(true, tab, callback);
-    });
+kpxcEvent.lockDatabase = async function(tab) {
+    try {
+        await keepass.lockDatabase(tab);
+        return kpxcEvent.showStatus(tab, false);
+    } catch (err) {
+        console.log('kpxcEvent.lockDatabase error: ' + err);
+        return false;
+    }
 };
 
-kpxcEvent.onPopStack = function(callback, tab) {
+kpxcEvent.onPopStack = function(tab) {
     browserAction.stackPop(tab.id);
-    browserAction.show(null, tab);
+    browserAction.show(tab);
+    return Promise.resolve();
 };
 
-kpxcEvent.onGetTabInformation = function(callback, tab) {
+kpxcEvent.onGetTabInformation = function(tab) {
     const id = tab.id || page.currentTabId;
-    callback(page.tabs[id]);
+    return Promise.resolve(page.tabs[id]);
 };
 
-kpxcEvent.onGetConnectedDatabase = function(callback, tab) {
-    callback({
+kpxcEvent.onGetConnectedDatabase = function() {
+    return Promise.resolve({
         count: Object.keys(keepass.keyRing).length,
         identifier: (keepass.keyRing[keepass.associated.hash]) ? keepass.keyRing[keepass.associated.hash].id : null
     });
 };
 
-kpxcEvent.onGetKeePassXCVersions = function(callback, tab) {
+kpxcEvent.onGetKeePassXCVersions = async function(tab) {
     if (keepass.currentKeePassXC === '') {
-        keepass.getDatabaseHash((res) => {
-            callback({ 'current': keepass.currentKeePassXC, 'latest': keepass.latestKeePassXC.version });
-        }, tab);
-    } else {
-        callback({ 'current': keepass.currentKeePassXC, 'latest': keepass.latestKeePassXC.version });
+        await keepass.getDatabaseHash(tab);
+        return { 'current': keepass.currentKeePassXC, 'latest': keepass.latestKeePassXC.version };
     }
+
+    return Promise.resolve({ 'current': keepass.currentKeePassXC, 'latest': keepass.latestKeePassXC.version });
 };
 
-kpxcEvent.onCheckUpdateKeePassXC = function(callback, tab) {
+kpxcEvent.onCheckUpdateKeePassXC = async function() {
     keepass.checkForNewKeePassXCVersion();
-    callback({ current: keepass.currentKeePassXC.version, latest: keepass.latestKeePassXC.version });
+    return { current: keepass.currentKeePassXC.version, latest: keepass.latestKeePassXC.version };
 };
 
-kpxcEvent.onUpdateAvailableKeePassXC = function(callback, tab) {
-    callback(page.settings.checkUpdateKeePassXC > 0 ? keepass.keePassXCUpdateAvailable() : false);
+kpxcEvent.onUpdateAvailableKeePassXC = async function() {
+    return (page.settings.checkUpdateKeePassXC > 0) ? keepass.keePassXCUpdateAvailable() : false;
 };
 
-kpxcEvent.onRemoveCredentialsFromTabInformation = function(callback, tab) {
+kpxcEvent.onRemoveCredentialsFromTabInformation = function(tab) {
     const id = tab.id || page.currentTabId;
     page.clearCredentials(id);
     page.clearSubmittedCredentials();
+    return Promise.resolve();
 };
 
-kpxcEvent.onLoginPopup = function(callback, tab, logins) {
+kpxcEvent.onLoginPopup = function(tab, logins) {
     const stackData = {
         level: 1,
         iconType: 'questionmark',
         popup: 'popup_login.html'
     };
+
     browserAction.stackUnshift(stackData, tab.id);
-    page.tabs[tab.id].loginList = logins;
-    browserAction.show(null, tab);
+
+    if (logins.length > 0) {
+        page.tabs[tab.id].loginList = logins[0];
+    }
+
+    browserAction.show(tab);
+    return Promise.resolve();
 };
 
-kpxcEvent.initHttpAuth = function(callback) {
+kpxcEvent.initHttpAuth = function() {
     httpAuth.init();
-    callback();
-};
+    return Promise.resolve();
+}
 
-kpxcEvent.onHTTPAuthPopup = function(callback, tab, data) {
+kpxcEvent.onHTTPAuthPopup = function(tab, data) {
     const stackData = {
         level: 1,
         iconType: 'questionmark',
         popup: 'popup_httpauth.html'
     };
+
     browserAction.stackUnshift(stackData, tab.id);
     page.tabs[tab.id].loginList = data;
-    browserAction.show(null, tab);
+    browserAction.show(tab);
+    return Promise.resolve();
 };
 
-kpxcEvent.onMultipleFieldsPopup = function(callback, tab) {
+kpxcEvent.onMultipleFieldsPopup = function(tab) {
     const stackData = {
         level: 1,
         iconType: 'normal',
         popup: 'popup_multiple-fields.html'
     };
+
     browserAction.stackUnshift(stackData, tab.id);
-    browserAction.show(null, tab);
+    browserAction.show(tab);
+    return Promise.resolve();
 };
 
-kpxcEvent.pageClearLogins = function(callback, tab, alreadyCalled) {
+kpxcEvent.pageClearLogins = function(tab, alreadyCalled) {
     if (!alreadyCalled) {
         page.clearLogins(tab.id);
     }
-    callback();
+    return Promise.resolve();
 };
 
-kpxcEvent.pageGetLoginId = function(callback, tab) {
-    callback(page.loginId);
+kpxcEvent.pageGetLoginId = function() {
+    return Promise.resolve(page.loginId);
 };
 
-kpxcEvent.pageSetLoginId = function(callback, tab, loginId) {
+kpxcEvent.pageSetLoginId = function(tab, loginId) {
     page.loginId = loginId;
-    callback();
+    return Promise.resolve();
 };
 
-kpxcEvent.pageClearSubmitted = function(callback, tab) {
+kpxcEvent.pageClearSubmitted = function() {
     page.clearSubmittedCredentials();
-    callback();
+    return Promise.resolve();
 }
 
-kpxcEvent.pageGetSubmitted = function(callback, tab) {
-    callback(page.submittedCredentials);
+kpxcEvent.pageGetSubmitted = function() {
+    return Promise.resolve(page.submittedCredentials);
 };
 
-kpxcEvent.pageSetSubmitted = function(callback, tab, submitted, username, password, url, oldCredentials) {
+kpxcEvent.pageSetSubmitted = function(tab, args = []) {
+    const [ submitted, username, password, url, oldCredentials ] = args;
     page.setSubmittedCredentials(submitted, username, password, url, oldCredentials);
-    callback();
+    return Promise.resolve();
 };
 
 // All methods named in this object have to be declared BEFORE this!

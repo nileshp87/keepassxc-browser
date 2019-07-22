@@ -37,7 +37,11 @@ kpxcBanner.create = async function(credentials = {}) {
     }
 
     // Check if database is closed
-    const state = await kpxc.sendMessage('get_database_hash', [ true ]);
+    const state = await browser.runtime.sendMessage({
+        action: 'get_database_hash',
+        args: [ true ]
+    });
+
     if (state === '') {
         //kpxcUI.createNotification('error', tr('rememberErrorDatabaseClosed'));
         return;
@@ -126,104 +130,109 @@ kpxcBanner.create = async function(credentials = {}) {
     document.body.appendChild(banner);
 };
 
-kpxcBanner.saveNewCredentials = function(credentials = {}) {
-    browser.runtime.sendMessage({
+kpxcBanner.saveNewCredentials = async function(credentials = {}) {
+    const result = await browser.runtime.sendMessage({
         action: 'get_database_groups'
-    }).then((result) => {
-        // Only the Root group and no KeePassXC-Browser passwords -> save to default
-        // Or when default group is not set and defaultGroupAskAlways is disabled -> save to default
-        if ((result.groups === undefined || (result.groups.length > 0 && result.groups[0].children.length === 0)) ||
-            (!result.defaultGroupAlwaysAsk && (result.defaultGroup === '' || result.defaultGroup === DEFAULT_BROWSER_GROUP))) {
-            browser.runtime.sendMessage({
-                action: 'add_credentials',
-                args: [ credentials.username, credentials.password, credentials.url ]
-            }).then(kpxcBanner.verifyResult);
-            return;
-        } else if (!result.defaultGroupAlwaysAsk && (result.defaultGroup !== '' || result.defaultGroup !== DEFAULT_BROWSER_GROUP)) {
-            // Another group name has been specified
-            const [ gname, guuid ] = kpxcBanner.getDefaultGroup(result.groups[0].children, result.defaultGroup);
-            if (gname === '' && guuid === '') {
-                // Root group is used -> use the root path
-                if (result.defaultGroup.toLowerCase() === 'root') {
-                    result.defaultGroup = '/';
-                }
+    });
 
-                // Create a new group
-                browser.runtime.sendMessage({
-                    action: 'create_new_group',
-                    args: [ result.defaultGroup ]
-                }).then((newGroup) => {
-                    if (newGroup.name && newGroup.uuid) {
-                        browser.runtime.sendMessage({
-                            action: 'add_credentials',
-                            args: [ credentials.username, credentials.password, credentials.url, newGroup.name, newGroup.uuid ]
-                        }).then(kpxcBanner.verifyResult);
-                    } else {
-                        kpxcUI.createNotification('error', tr('rememberErrorCreatingNewGroup'));
-                    }
-                    return;
-                });
+    // Only the Root group and no KeePassXC-Browser passwords -> save to default
+    // Or when default group is not set and defaultGroupAskAlways is disabled -> save to default
+    if ((result.groups === undefined || (result.groups.length > 0 && result.groups[0].children.length === 0)) ||
+        (!result.defaultGroupAlwaysAsk && (result.defaultGroup === '' || result.defaultGroup === DEFAULT_BROWSER_GROUP))) {
+        const res = await browser.runtime.sendMessage({
+            action: 'add_credentials',
+            args: [ credentials.username, credentials.password, credentials.url ]
+        });
+        kpxcBanner.verifyResult(res);
+        return;
+    } else if (!result.defaultGroupAlwaysAsk && (result.defaultGroup !== '' || result.defaultGroup !== DEFAULT_BROWSER_GROUP)) {
+        // Another group name has been specified
+        const [ gname, guuid ] = kpxcBanner.getDefaultGroup(result.groups[0].children, result.defaultGroup);
+        if (gname === '' && guuid === '') {
+            // Root group is used -> use the root path
+            if (result.defaultGroup.toLowerCase() === 'root') {
+                result.defaultGroup = '/';
             }
 
-            browser.runtime.sendMessage({
-                action: 'add_credentials',
-                args: [ credentials.username, credentials.password, credentials.url, gname, guuid ]
-            }).then(kpxcBanner.verifyResult);
-            return;
-        }
-
-        const addChildren = function(group, parentElement, depth) {
-            ++depth;
-            const padding = depth * 20;
-
-            for (const child of group.children) {
-                const a = createLink(child.name, child.uuid, child.children.length > 0);
-                a.setAttribute('id', 'child');
-                a.style.paddingLeft = Pixels(padding);
-
-                if (parentElement.getAttribute('id') === 'root') {
-                    a.setAttribute('id', 'root-child');
-                }
-
-                $('ul#list').appendChild(a);
-                addChildren(child, a, depth);
-            }
-        };
-
-        const createLink = function(group, groupUuid, hasChildren) {
-            const a = kpxcUI.createElement('a', 'list-group-item', { 'href': '#' }, group);
-            a.addEventListener('click', function(e) {
-                e.preventDefault();
-                if (!e.isTrusted) {
-                    return;
-                }
-
-                browser.runtime.sendMessage({
-                    action: 'add_credentials',
-                    args: [ credentials.username, credentials.password, credentials.url, group, groupUuid ]
-                }).then(kpxcBanner.verifyResult);
+            // Create a new group
+            const newGroup = await browser.runtime.sendMessage({
+                action: 'create_new_group',
+                args: [ result.defaultGroup ]
             });
 
-            if (hasChildren) {
-                a.textContent = '\u25BE ' + group;
+            if (newGroup.name && newGroup.uuid) {
+                const res = await browser.runtime.sendMessage({
+                    action: 'add_credentials',
+                    args: [ credentials.username, credentials.password, credentials.url, newGroup.name, newGroup.uuid ]
+                });
+                kpxcBanner.verifyResult(res);
+            } else {
+                kpxcUI.createNotification('error', tr('rememberErrorCreatingNewGroup'));
             }
-            return a;
-        };
-
-        kpxcBanner.createGroupDialog();
-
-        // Create the link list for group selection
-        let depth = 0;
-        for (const g of result.groups) {
-            const a = createLink(g.name, g.uuid, g.children.length > 0);
-            a.setAttribute('id', 'root');
-
-            $('ul#list').appendChild(a);
-            addChildren(g, a, depth);
+            return;
         }
 
-        $('.kpxc-banner-dialog').style.display = 'block';
-    });
+        const res = await browser.runtime.sendMessage({
+            action: 'add_credentials',
+            args: [ credentials.username, credentials.password, credentials.url, gname, guuid ]
+        });
+        kpxcBanner.verifyResult(res);
+        return;
+    }
+
+    const addChildren = function(group, parentElement, depth) {
+        ++depth;
+        const padding = depth * 20;
+
+        for (const child of group.children) {
+            const a = createLink(child.name, child.uuid, child.children.length > 0);
+            a.setAttribute('id', 'child');
+            a.style.paddingLeft = Pixels(padding);
+
+            if (parentElement.getAttribute('id') === 'root') {
+                a.setAttribute('id', 'root-child');
+            }
+
+            $('ul#list').appendChild(a);
+            addChildren(child, a, depth);
+        }
+    };
+
+    const createLink = function(group, groupUuid, hasChildren) {
+        const a = kpxcUI.createElement('a', 'list-group-item', { 'href': '#' }, group);
+        a.addEventListener('click', async function(e) {
+            e.preventDefault();
+            if (!e.isTrusted) {
+                return;
+            }
+
+            const res = await browser.runtime.sendMessage({
+                action: 'add_credentials',
+                args: [ credentials.username, credentials.password, credentials.url, group, groupUuid ]
+            });
+
+            kpxcBanner.verifyResult(res);
+        });
+
+        if (hasChildren) {
+            a.textContent = '\u25BE ' + group;
+        }
+        return a;
+    };
+
+    kpxcBanner.createGroupDialog();
+
+    // Create the link list for group selection
+    let depth = 0;
+    for (const g of result.groups) {
+        const a = createLink(g.name, g.uuid, g.children.length > 0);
+        a.setAttribute('id', 'root');
+
+        $('ul#list').appendChild(a);
+        addChildren(g, a, depth);
+    }
+
+    $('.kpxc-banner-dialog').style.display = 'block';
 };
 
 kpxcBanner.updateCredentials = async function(credentials = {}) {
@@ -234,10 +243,11 @@ kpxcBanner.updateCredentials = async function(credentials = {}) {
             credentials.username = credentials.list[0].login;
         }
 
-        browser.runtime.sendMessage({
+        const res = await browser.runtime.sendMessage({
             action: 'update_credentials',
             args: [ credentials.list[0].uuid, credentials.username, credentials.password, credentials.url ]
-        }).then(kpxcBanner.verifyResult);
+        });
+        kpxcBanner.verifyResult(res);
     } else {
         await kpxcBanner.createCredentialDialog();
         $('.kpxc-banner-dialog .username-new .strong').textContent = credentials.username;
@@ -272,17 +282,18 @@ kpxcBanner.updateCredentials = async function(credentials = {}) {
                 // Check if the password has changed for the updated credentials
                 browser.runtime.sendMessage({
                     action: 'retrieve_credentials',
-                    args: [ url, '', false, true ]
-                }).then((creds) => {
+                    args: [ url, '', true ] // Sets triggerUnlock to true
+                }).then(async (creds) => {
                     if (!creds || creds.length !== credentials.list.length) {
                         kpxcBanner.verifyResult('error');
                         return;
                     }
 
-                    browser.runtime.sendMessage({
+                    const res = await browser.runtime.sendMessage({
                         action: 'update_credentials',
                         args: [ credentials.list[entryId].uuid, credentials.username, credentials.password, credentials.url ]
-                    }).then(kpxcBanner.verifyResult);
+                    });
+                    kpxcBanner.verifyResult(res);
                 });
             });
 
@@ -379,7 +390,7 @@ kpxcBanner.createGroupDialog = function() {
 
     // Set dialog position
     dialog.style.top = Pixels(kpxcBanner.banner.offsetHeight);
-    dialog.style.right = '0';
+    dialog.style.right = Pixels(0);
 
     dialog.appendMultiple(chooseGroup, list);
     document.body.appendChild(dialog);

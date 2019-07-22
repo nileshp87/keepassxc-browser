@@ -287,7 +287,7 @@ kpxcDefine.more = function() {
     }
 };
 
-kpxcDefine.confirm = function() {
+kpxcDefine.confirm = async function() {
     if (kpxcDefine.dataStep !== 3) {
         return;
     }
@@ -317,7 +317,7 @@ kpxcDefine.confirm = function() {
         fields: fieldIds
     };
 
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'save_settings',
         args: [ kpxc.settings ]
     });
@@ -325,7 +325,7 @@ kpxcDefine.confirm = function() {
     kpxcDefine.close();
 };
 
-kpxcDefine.discard = function() {
+kpxcDefine.discard = async function() {
     if (!$('#kpxcDefine-btn-discard')) {
         return;
     }
@@ -333,12 +333,12 @@ kpxcDefine.discard = function() {
     const location = kpxc.getDocumentLocation();
     delete kpxc.settings['defined-custom-fields'][location];
 
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'save_settings',
         args: [ kpxc.settings ]
     });
 
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'load_settings'
     });
 

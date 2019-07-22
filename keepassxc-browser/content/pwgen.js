@@ -237,16 +237,14 @@ kpxcPassword.showDialog = function(field, icon) {
     }
 };
 
-kpxcPassword.generate = function(e) {
+kpxcPassword.generate = async function(e) {
     if (e) {
         e.preventDefault();
     }
 
-    browser.runtime.sendMessage({
+    callbackGeneratedPassword(await browser.runtime.sendMessage({
         action: 'generate_password'
-    }).then(callbackGeneratedPassword).catch((err) => {
-        console.log(err);
-    });
+    }));
 };
 
 kpxcPassword.copy = function(e) {

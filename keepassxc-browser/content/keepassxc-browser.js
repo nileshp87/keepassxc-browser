@@ -24,7 +24,7 @@ var _observerIds = [];
 let _documentURL = document.location.href;
 
 // These are executed in each frame
-browser.runtime.onMessage.addListener(function(req, sender) {
+browser.runtime.onMessage.addListener(async function(req, sender) {
     if ('action' in req) {
         if (req.action === 'fill_user_pass_with_specific_login') {
             if (kpxc.credentials[req.id]) {
@@ -33,14 +33,16 @@ browser.runtime.onMessage.addListener(function(req, sender) {
                     kpxc.setValueWithChange(kpxc.u, kpxc.credentials[req.id].login);
                     combination = kpxcFields.getCombination('username', kpxc.u);
                     browser.runtime.sendMessage({
-                        action: 'page_set_login_id', args: [ req.id ]
+                        action: 'page_set_login_id',
+                        args: [ req.id ]
                     });
                     kpxc.u.focus();
                 }
                 if (kpxc.p) {
                     kpxc.setValueWithChange(kpxc.p, kpxc.credentials[req.id].password);
                     browser.runtime.sendMessage({
-                        action: 'page_set_login_id', args: [ req.id ]
+                        action: 'page_set_login_id',
+                        args: [ req.id ]
                     });
                     combination = kpxcFields.getCombination('password', kpxc.p);
                 }
@@ -52,18 +54,15 @@ browser.runtime.onMessage.addListener(function(req, sender) {
             }
         } else if (req.action === 'fill_username_password') {
             _called.manualFillRequested = ManualFill.BOTH;
-            kpxc.receiveCredentialsIfNecessary().then((response) => {
-                kpxc.fillInFromActiveElement(false);
-            });
+            await kpxc.receiveCredentialsIfNecessary();
+            kpxc.fillInFromActiveElement(false);
         } else if (req.action === 'fill_password') {
             _called.manualFillRequested = ManualFill.PASS;
-            kpxc.receiveCredentialsIfNecessary().then((response) => {
-                kpxc.fillInFromActiveElement(false, true); // passOnly to true
-            });
+            await kpxc.receiveCredentialsIfNecessary();
+            kpxc.fillInFromActiveElement(false, true); // passOnly to true
         } else if (req.action === 'fill_totp') {
-            kpxc.receiveCredentialsIfNecessary().then((response) => {
-                kpxc.fillInFromActiveElementTOTPOnly(false);
-            });
+            await kpxc.receiveCredentialsIfNecessary();
+            kpxc.fillInFromActiveElementTOTPOnly(false);
         } else if (req.action === 'clear_credentials') {
             kpxcEvents.clearCredentials();
             return Promise.resolve();
@@ -79,12 +78,11 @@ browser.runtime.onMessage.addListener(function(req, sender) {
         } else if (req.action === 'choose_credential_fields') {
             kpxcDefine.init();
         } else if (req.action === 'redetect_fields') {
-            browser.runtime.sendMessage({
+            const response = await browser.runtime.sendMessage({
                 action: 'load_settings'
-            }).then((response) => {
-                kpxc.settings = response;
-                kpxc.initCredentialFields(true);
             });
+            kpxc.settings = response;
+            kpxc.initCredentialFields(true);
         } else if (req.action === 'show_password_generator') {
             kpxcPassword.trigger();
         }
@@ -102,7 +100,7 @@ function _fs(fieldId) {
 }
 
 
-var kpxcForm = {};
+const kpxcForm = {};
 kpxcForm.passwordInputs = [];
 
 kpxcForm.init = function(form, credentialFields) {
@@ -111,7 +109,7 @@ kpxcForm.init = function(form, credentialFields) {
         kpxcForm.setInputFields(form, credentialFields);
         form.addEventListener('submit', kpxcForm.onSubmit);
 
-        const submitButton = kpxc.getSubmitButton(form);
+        const submitButton = kpxc.getFormSubmitButton(form);
         if (submitButton !== undefined) {
             submitButton.addEventListener('click', kpxcForm.onSubmit);
         }
@@ -173,6 +171,9 @@ kpxcForm.onSubmit = async function() {
         action: 'page_set_submitted',
         args: [ true, usernameValue, passwordValue, trimURL(window.top.location.href), kpxc.credentials ]
     });
+
+    // Show the banner if the page does not reload
+    kpxc.rememberCredentials(usernameValue, passwordValue);
 };
 
 // Retrieve new password from a form with three elements: Current, New, Repeat New
@@ -204,7 +205,6 @@ kpxcForm.getNewPassword = function() {
 
 
 var kpxcFields = {};
-
 kpxcFields.inputQueryPattern = 'input[type=\'text\'], input[type=\'email\'], input[type=\'password\'], input[type=\'tel\'], input[type=\'number\'], input[type=\'username\'], input:not([type])';
 
 // copied from Sizzle.js
@@ -546,7 +546,7 @@ kpxcFields.getPasswordField = function(usernameId, checkDisabled) {
     return passwordField;
 };
 
-kpxcFields.prepareCombinations = function(combinations) {
+kpxcFields.prepareCombinations = async function(combinations) {
     for (const c of combinations) {
         const pwField = _f(c.password);
         // Needed for auto-complete: don't overwrite manually filled-in password field
@@ -564,12 +564,12 @@ kpxcFields.prepareCombinations = function(combinations) {
         const usernameField = c.username ? _f(c.username) : field;
 
         // Change icon for username field
-        browser.runtime.sendMessage({
+        const res = await browser.runtime.sendMessage({
             action: 'get_status',
             args: [ true ]
-        }).then((res) => {
-            kpxcUsernameField.initField(usernameField, res.databaseClosed);
         });
+
+        kpxcUsernameField.initField(usernameField, res.databaseClosed);
 
         // Initialize form-submit for remembering credentials
         if (field) {
@@ -610,7 +610,8 @@ kpxcFields.useDefinedCredentialFields = function() {
     return false;
 };
 
-var kpxcObserverHelper = {};
+const kpxcObserverHelper = {};
+
 kpxcObserverHelper.inputTypes = [
     'text',
     'email',
@@ -793,25 +794,35 @@ kpxc.url = null;
 kpxc.submitUrl = null;
 kpxc.credentials = [];
 
-const initcb = function() {
-    browser.runtime.sendMessage({
-        action: 'load_settings'
-    }).then(async(response) => {
-        kpxc.settings = response;
-        kpxc.initCredentialFields();
+const initcb = async function() {
+    try {
+        const settings = await browser.runtime.sendMessage({
+            action: 'load_settings'
+        });
+
+        kpxc.settings = settings;
+        await kpxc.initCredentialFields();
 
         // Retrieve submitted credentials if available.
-        const creds = await kpxc.sendMessage('page_get_submitted');
+        const creds = await browser.runtime.sendMessage({
+            action: 'page_get_submitted'
+        });
+
         if (creds && creds.submitted) {
             // If username field is not set, wait for credentials in kpxc.retrieveCredentialsCallback.
             if (!creds.username) {
                 return;
             }
 
-            kpxc.sendMessage('page_clear_submitted');
+            await browser.runtime.sendMessage({
+                action: 'page_clear_submitted'
+            });
+
             kpxc.rememberCredentials(creds.username, creds.password, creds.url, creds.oldCredentials);
         }
-    });
+    } catch (err) {
+        console.log('Error: Cannot load extension settings');
+    }
 };
 
 if (document.readyState === 'complete' || (document.readyState !== 'loading' && !document.documentElement.doScroll)) {
@@ -827,7 +838,6 @@ kpxc.init = function() {
 // Clears all from the content and background scripts, including autocomplete
 kpxc.clearAllFromPage = function() {
     kpxcEvents.clearCredentials();
-
     browser.runtime.sendMessage({
         action: 'page_clear_logins'
     });
@@ -840,98 +850,98 @@ kpxc.clearAllFromPage = function() {
 };
 
 // Switch credentials if database is changed or closed
-kpxc.detectDatabaseChange = function(response) {
+kpxc.detectDatabaseChange = async function(response) {
     kpxc.clearAllFromPage();
     kpxcUsernameField.switchIcon(true);
 
     if (document.visibilityState !== 'hidden') {
         if (response.new !== '' && response.new !== response.old) {
             _called.retrieveCredentials = false;
-            browser.runtime.sendMessage({
+            const settings = await browser.runtime.sendMessage({
                 action: 'load_settings'
-            }).then((settings) => {
-                kpxc.settings = settings;
-                kpxc.initCredentialFields(true);
-                kpxcUsernameField.switchIcon(false); // Unlocked
-
-                // If user has requested a manual fill through context menu the actual credential filling
-                // is handled here when the opened database has been regognized. It's not a pretty hack.
-                if (_called.manualFillRequested && _called.manualFillRequested !== ManualFill.NONE) {
-                    kpxc.fillInFromActiveElement(false, _called.manualFillRequested === ManualFill.PASS);
-                    _called.manualFillRequested = ManualFill.NONE;
-                }
             });
+            kpxc.settings = settings;
+            await kpxc.initCredentialFields(true);
+            kpxcUsernameField.switchIcon(false); // Unlocked
+
+            // If user has requested a manual fill through context menu the actual credential filling
+            // is handled here when the opened database has been regognized. It's not a pretty hack.
+            if (_called.manualFillRequested && _called.manualFillRequested !== ManualFill.NONE) {
+                await kpxc.fillInFromActiveElement(false, _called.manualFillRequested === ManualFill.PASS);
+                _called.manualFillRequested = ManualFill.NONE;
+            }
         }
     }
 };
 
-kpxc.initCredentialFields = function(forceCall) {
+kpxc.initCredentialFields = async function(forceCall) {
     if (_called.initCredentialFields && !forceCall) {
         return;
     }
     _called.initCredentialFields = true;
 
-    browser.runtime.sendMessage({ 'action': 'page_clear_logins', args: [ _called.clearLogins ] }).then(() => {
-        _called.clearLogins = true;
+    await browser.runtime.sendMessage({
+        action: 'page_clear_logins',
+        args: [ _called.clearLogins ]
+    });
 
-        // Check site preferences
-        kpxc.initializeSitePreferences();
-        if (kpxc.settings.sitePreferences) {
-            for (const site of kpxc.settings.sitePreferences) {
-                try {
-                    if (siteMatch(site.url, window.top.location.href) || site.url === window.top.location.href) {
-                        if (site.ignore === IGNORE_FULL) {
-                            return;
-                        }
+    _called.clearLogins = true;
 
-                        _singleInputEnabledForPage = site.usernameOnly;
+    // Check site preferences
+    kpxc.initializeSitePreferences();
+    if (kpxc.settings.sitePreferences) {
+        for (const site of kpxc.settings.sitePreferences) {
+            try {
+                if (siteMatch(site.url, window.top.location.href) || site.url === window.top.location.href) {
+                    if (site.ignore === IGNORE_FULL) {
+                        return;
                     }
-                } catch (err) {
-                    return;
+
+                    _singleInputEnabledForPage = site.usernameOnly;
                 }
+            } catch (err) {
+                return;
             }
         }
+    }
 
-        const inputs = kpxcFields.getAllFields();
-        if (inputs.length === 0) {
-            return;
-        }
+    const inputs = kpxcFields.getAllFields();
+    if (inputs.length === 0) {
+        return;
+    }
 
-        kpxcFields.prepareVisibleFieldsWithID('select');
-        kpxc.initPasswordGenerator(inputs);
+    kpxcFields.prepareVisibleFieldsWithID('select');
+    kpxc.initPasswordGenerator(inputs);
 
-        if (!kpxcFields.useDefinedCredentialFields()) {
-            // Get all combinations of username + password fields
-            kpxcFields.combinations = kpxcFields.getAllCombinations(inputs);
-        }
-        kpxcFields.prepareCombinations(kpxcFields.combinations);
+    if (!kpxcFields.useDefinedCredentialFields()) {
+        // Get all combinations of username + password fields
+        kpxcFields.combinations = kpxcFields.getAllCombinations(inputs);
+    }
+    kpxcFields.prepareCombinations(kpxcFields.combinations);
 
-        if (kpxcFields.combinations.length === 0 && inputs.length === 0) {
-            browser.runtime.sendMessage({
-                action: 'show_default_browseraction'
-            });
-            return;
-        }
+    if (kpxcFields.combinations.length === 0 && inputs.length === 0) {
+        browser.runtime.sendMessage({
+            action: 'show_default_browseraction'
+        });
+        return;
+    }
 
-        kpxc.url = document.location.origin;
-        kpxc.submitUrl = kpxc.getFormActionUrl(kpxcFields.combinations[0]);
+    kpxc.url = document.location.origin;
+    kpxc.submitUrl = kpxc.getFormActionUrl(kpxcFields.combinations[0]);
 
-        // Get submitUrl for a single input
-        if (!kpxc.submitUrl && kpxcFields.combinations.length === 1 && inputs.length === 1) {
-            kpxc.submitUrl = kpxc.getFormActionUrlFromSingleInput(inputs[0]);
-        }
+    // Get submitUrl for a single input
+    if (!kpxc.submitUrl && kpxcFields.combinations.length === 1 && inputs.length === 1) {
+        kpxc.submitUrl = kpxc.getFormActionUrlFromSingleInput(inputs[0]);
+    }
 
-        if (kpxc.settings.autoRetrieveCredentials && _called.retrieveCredentials === false && (kpxc.url && kpxc.submitUrl)) {
-            browser.runtime.sendMessage({
-                action: 'retrieve_credentials',
-                args: [ kpxc.url, kpxc.submitUrl ]
-            }).then(kpxc.retrieveCredentialsCallback).catch((e) => {
-                console.log(e);
-            });
-        } else if (_singleInputEnabledForPage) {
-            kpxc.preparePageForMultipleCredentials(kpxc.credentials);
-        }
-    });
+    if (kpxc.settings.autoRetrieveCredentials && _called.retrieveCredentials === false && (kpxc.url && kpxc.submitUrl)) {
+        kpxc.retrieveCredentialsCallback(await browser.runtime.sendMessage({
+            action: 'retrieve_credentials',
+            args: [ kpxc.url, kpxc.submitUrl ]
+        }));
+    } else if (_singleInputEnabledForPage) {
+        kpxc.preparePageForMultipleCredentials(kpxc.credentials);
+    }
 };
 
 kpxc.initPasswordGenerator = function(inputs) {
@@ -944,22 +954,20 @@ kpxc.initPasswordGenerator = function(inputs) {
     }
 };
 
-kpxc.receiveCredentialsIfNecessary = function() {
-    return new Promise((resolve, reject) => {
-        if (kpxc.credentials.length === 0 && _called.retrieveCredentials === false) {
-            browser.runtime.sendMessage({
-                action: 'retrieve_credentials',
-                args: [ kpxc.url, kpxc.submitUrl, false, true ] // Sets triggerUnlock to true
-            }).then((credentials) => {
-                // If the database was locked, this is scope never met. In these cases the response is met at kpxc.detectDatabaseChange
-                _called.manualFillRequested = ManualFill.NONE;
-                kpxc.retrieveCredentialsCallback(credentials, false);
-                resolve(credentials);
-            });
-        } else {
-            resolve(kpxc.credentials);
-        }
-    });
+kpxc.receiveCredentialsIfNecessary = async function() {
+    if (kpxc.credentials.length === 0 && _called.retrieveCredentials === false) {
+        const credentials = await browser.runtime.sendMessage({
+            action: 'retrieve_credentials',
+            args: [ kpxc.url, kpxc.submitUrl, true ] // Sets triggerUnlock to true
+        });
+
+        // If the database was locked, this is scope never met. In these cases the response is met at kpxc.detectDatabaseChange
+        _called.manualFillRequested = ManualFill.NONE;
+        kpxc.retrieveCredentialsCallback(credentials, false);
+        return credentials;
+    }
+
+    return kpxc.credentials;
 };
 
 kpxc.retrieveCredentialsCallback = async function(credentials, dontAutoFillIn) {
@@ -975,9 +983,15 @@ kpxc.retrieveCredentialsCallback = async function(credentials, dontAutoFillIn) {
     }
 
     // Retrieve submitted credentials if available
-    const creds = await kpxc.sendMessage('page_get_submitted');
+    const creds = await browser.runtime.sendMessage({
+        action: 'page_get_submitted'
+    });
+
     if (creds && creds.submitted) {
-        kpxc.sendMessage('page_clear_submitted');
+        await browser.runtime.sendMessage({
+            action: 'page_clear_submitted'
+        });
+
         kpxc.rememberCredentials(creds.username, creds.password, creds.url, creds.oldCredentials);
     }
 };
@@ -1117,7 +1131,7 @@ kpxc.getFormActionUrlFromSingleInput = function(field) {
 };
 
 // Get the form submit button instead if action URL is same as the page itself
-kpxc.getSubmitButton = function(form) {
+kpxc.getFormSubmitButton = function(form) {
     const action = kpxc.submitUrl || form.action;
     if (action.includes(document.location.origin + document.location.pathname)) {
         for (const i of form.elements) {
@@ -1136,7 +1150,7 @@ kpxc.getSubmitButton = function(form) {
     return undefined;
 };
 
-kpxc.fillInCredentials = function(combination, onlyPassword, suppressWarnings) {
+kpxc.fillInCredentials = async function(combination, onlyPassword, suppressWarnings) {
     const action = kpxc.getFormActionUrl(combination);
     const u = _f(combination.username);
     const p = _f(combination.password);
@@ -1166,13 +1180,13 @@ kpxc.fillInCredentials = function(combination, onlyPassword, suppressWarnings) {
         kpxc.url = document.location.origin;
         kpxc.submitUrl = action;
 
-        browser.runtime.sendMessage({
+        const credentials = await browser.runtime.sendMessage({
             action: 'retrieve_credentials',
-            args: [ kpxc.url, kpxc.submitUrl, false, true ]
-        }).then((credentials) => {
-            kpxc.retrieveCredentialsCallback(credentials, true);
-            kpxc.fillIn(combination, onlyPassword, suppressWarnings);
+            args: [ kpxc.url, kpxc.submitUrl, true ] // Sets triggerUnlock to true
         });
+
+        kpxc.retrieveCredentialsCallback(credentials, true);
+        kpxc.fillIn(combination, onlyPassword, suppressWarnings);
     }
 };
 
@@ -1217,7 +1231,10 @@ kpxc.fillInFromActiveElementTOTPOnly = async function() {
     kpxcFields.setUniqueId(el);
     const fieldId = kpxcFields.prepareId(el.getAttribute('data-kpxc-id'));
 
-    const index = await kpxc.sendMessage('page_get_login_id');
+    const index = await browser.runtime.sendMessage({
+        action: 'page_get_login_id'
+    });
+
     if (index >= 0 && kpxc.credentials[index]) {
         // Check the value from stringFields (to be removed)
         const currentField = _fs(fieldId);
@@ -1433,7 +1450,7 @@ kpxc.fillIn = function(combination, onlyPassword, suppressWarnings) {
     // Auto-submit
     if (kpxc.settings.autoSubmit) {
         const form = kpxc.u.form || kpxc.p.form;
-        const submitButton = kpxc.getSubmitButton(form);
+        const submitButton = kpxc.getFormSubmitButton(form);
         if (submitButton !== undefined) {
             submitButton.click();
         } else {
@@ -1548,7 +1565,10 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
             if (credentialsList.length === 1) {
                 usernameValue = credentialsList[0].login;
             } else if (credentialsList.length > 1) {
-                const index = await kpxc.sendMessage('page_get_login_id');
+                const index = await browser.runtime.sendMessage({
+                    action: 'page_get_login_id'
+                });
+
                 if (index >= 0) {
                     usernameValue = credentialsList[index].login;
                 }
@@ -1571,7 +1591,7 @@ kpxc.rememberCredentials = async function(usernameValue, passwordValue, urlValue
     return false;
 };
 
-kpxc.ignoreSite = function(sites) {
+kpxc.ignoreSite = async function(sites) {
     if (!sites || sites.length === 0) {
         return;
     }
@@ -1600,7 +1620,7 @@ kpxc.ignoreSite = function(sites) {
         });
     }
 
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'save_settings',
         args: [ kpxc.settings ]
     });
@@ -1622,7 +1642,7 @@ kpxc.getDocumentLocation = function() {
 };
 
 
-var kpxcEvents = {};
+const kpxcEvents = {};
 
 kpxcEvents.clearCredentials = function() {
     kpxc.credentials = [];
@@ -1646,29 +1666,18 @@ kpxcEvents.triggerActivatedTab = async function() {
     kpxc.init();
 
     // Update username field lock state
-    const state = await kpxc.sendMessage('get_database_hash', [ true ]);
+    const state = await browser.runtime.sendMessage({
+        action: 'get_database_hash',
+        args: [ true ]
+    });
     kpxcUsernameField.switchIcon(state === '');
 
     // initCredentialFields calls also "retrieve_credentials", to prevent it
     // check of init() was already called
     if (_called.initCredentialFields && (kpxc.url && kpxc.submitUrl) && kpxc.settings.autoRetrieveCredentials) {
-        browser.runtime.sendMessage({
+        kpxc.retrieveCredentialsCallback(await browser.runtime.sendMessage({
             action: 'retrieve_credentials',
             args: [ kpxc.url, kpxc.submitUrl ]
-        }).then(kpxc.retrieveCredentialsCallback).catch((e) => {
-            console.log(e);
-        });
+        }));
     }
-};
-
-// An async wrapper, to be replaced in the future (async/await implementation)
-kpxc.sendMessage = async function(action, args = []) {
-    return new Promise((resolve) => {
-        browser.runtime.sendMessage({
-            action: action,
-            args: args
-        }).then((index) => {
-            resolve(index);
-        });
-    });
 };

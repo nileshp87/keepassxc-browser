@@ -4,22 +4,22 @@ if (jQuery) {
     var $ = jQuery.noConflict(true);
 }
 
-$(function() {
-    browser.runtime.sendMessage({ action: 'load_settings' }).then((settings) => {
+$(async function() {
+    try {
+        const settings = await browser.runtime.sendMessage({ action: 'load_settings' });
         options.settings = settings;
-        browser.runtime.sendMessage({ action: 'load_keyring' }).then((keyRing) => {
-            options.keyRing = keyRing;
-            options.initMenu();
-            options.initGeneralSettings();
-            options.initConnectedDatabases();
-            options.initCustomCredentialFields();
-            options.initSitePreferences();
-            options.initAbout();
-        });
-    });
 
-    // Set options page language to HTML element from locale
-    $('html').attr('lang', browser.i18n.getUILanguage());
+        const keyRing = await browser.runtime.sendMessage({ action: 'load_keyring' });
+        options.keyRing = keyRing;
+        options.initMenu();
+        options.initGeneralSettings();
+        options.initConnectedDatabases();
+        options.initCustomCredentialFields();
+        options.initSitePreferences();
+        options.initAbout();
+    } catch (err) {
+        console.log('Error loading options page: ' + err);
+    }
 });
 
 var options = options || {};
@@ -48,7 +48,7 @@ options.saveSettingsPromise = function() {
     });
 };
 
-options.saveSetting = function(name) {
+options.saveSetting = async function(name) {
     const id = '#' + name;
     $(id).closest('.control-group').removeClass('error').addClass('success');
     setTimeout(() => {
@@ -56,21 +56,21 @@ options.saveSetting = function(name) {
     }, 2500);
 
     browser.storage.local.set({ 'settings': options.settings });
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'load_settings'
     });
 };
 
-options.saveSettings = function() {
+options.saveSettings = async function() {
     browser.storage.local.set({ 'settings': options.settings });
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'load_settings'
     });
 };
 
-options.saveKeyRing = function() {
+options.saveKeyRing = async function() {
     browser.storage.local.set({ 'keyRing': options.keyRing });
-    browser.runtime.sendMessage({
+    await browser.runtime.sendMessage({
         action: 'load_keyring'
     });
 };
@@ -135,7 +135,7 @@ options.initGeneralSettings = function() {
 
     browser.commands.getAll().then(function(commands) {
         commands.forEach(function(command) {
-            var shortcut = document.getElementById(`${command.name}-shortcut`);
+            let shortcut = document.getElementById(`${command.name}-shortcut`);
             if (!shortcut) {
                 return;
             }
@@ -237,9 +237,7 @@ options.initConnectedDatabases = function() {
     }
 
     $('#connect-button').click(function() {
-        browser.runtime.sendMessage({
-            action: 'associate'
-        });
+        browser.runtime.sendMessage({ action: 'associate' });
     });
 };
 
@@ -446,7 +444,7 @@ options.createWarning = function(elem, text) {
     const banner = document.createElement('div');
     banner.classList.add('alert', 'alert-dismissible', 'alert-danger', 'fade', 'in');
     banner.style.position = 'absolute';
-    banner.style.left = Pixels(elem.offsetLeft)';
+    banner.style.left = Pixels(elem.offsetLeft);
     banner.style.top = Pixels(elem.offsetTop + elem.offsetHeight);
     banner.style.padding = '0px';
     banner.style.width = '300px';
