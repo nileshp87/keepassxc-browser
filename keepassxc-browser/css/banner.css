@@ -11,6 +11,7 @@ div.kpxc-banner {
     height: auto !important;
     left: 0px !important;
     line-height: 1 !important;
+    margin: 0 auto !important;
     min-height: 2em !important;
     max-height: 4em !important;
     overflow-x: hidden !important;
@@ -18,11 +19,8 @@ div.kpxc-banner {
     position: fixed !important;
     top: 0px !important;
     width: 100% !important;
-}
-
-div.kpxc-banner#container {
-    display: flex;
-    justify-content: space-between;
+    display: flex !important;
+    justify-content: space-between !important;
 }
 
 @keyframes slidein {

@@ -1107,7 +1107,7 @@ keepass.disableAutomaticReconnect = function() {
     keepass.reconnectLoop = null;
 };
 
-keepass.reconnect = function(callback, tab) {
+keepass.reconnect = function(tab) {
     return new Promise(async (resolve) => {
         keepass.connectToNative();
         keepass.generateNewKeyPair();
