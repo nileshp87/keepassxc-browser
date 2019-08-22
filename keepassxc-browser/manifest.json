@@ -109,8 +109,7 @@
     "web_accessible_resources": [
         "icons/keepassxc.svg",
         "icons/key.svg",
-        "icons/lock.svg",
-        "icons/unlock.svg"
+        "icons/locked.svg"
     ],
     "permissions": [
         "activeTab",

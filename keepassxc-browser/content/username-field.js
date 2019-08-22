@@ -39,9 +39,11 @@ kpxcUsernameField.switchIcon = function(locked) {
     if (locked) {
         icon.classList.remove(getIconClassName());
         icon.classList.add(getIconClassName(true));
+        icon.title = tr('usernameLockedFieldText');
     } else {
         icon.classList.remove(getIconClassName(true));
         icon.classList.add(getIconClassName());
+        icon.title = tr('usernameFieldText');
     }
 };
 
@@ -59,7 +61,7 @@ const createIcon = function(target, databaseClosed) {
 
     const icon = kpxcUI.createElement('div', 'kpxc kpxc-username-icon ' + className,
         {
-            'title': tr('usernameFieldText'),
+            'title': databaseClosed ? tr('usernameLockedFieldText') : tr('usernameFieldText'),
             'alt': tr('usernameFieldIcon'),
             'size': size,
             'offset': offset,

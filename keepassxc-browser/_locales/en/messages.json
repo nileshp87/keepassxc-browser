@@ -156,8 +156,12 @@
         "description": "Password generator error text when KeePassXC is closed."
     },
     "usernameFieldText": {
-        "message": "Access KeePassXC credentials",
+        "message": "Fill credentials from KeePassXC",
         "description": "Username field icon hover text."
+    },
+    "usernameLockedFieldText": {
+        "message": "Database is locked",
+        "description": "Username field icon hover text when database is locked."
     },
     "usernameFieldIcon": {
         "message": "Username field icon",
